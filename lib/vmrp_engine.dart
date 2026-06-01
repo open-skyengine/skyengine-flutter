@@ -37,12 +37,13 @@ class VmrpKey {
 }
 
 class VmrpEngine {
-  final VmrpBindings _bindings = VmrpBindings();
+  VmrpBindings? _bindings;
   final int screenWidth;
   final int screenHeight;
 
   Timer? _timer;
   bool _running = false;
+  String? lastError;
 
   final StreamController<void> _onScreenUpdate = StreamController.broadcast();
   Stream<void> get onScreenUpdate => _onScreenUpdate.stream;
@@ -52,55 +53,96 @@ class VmrpEngine {
 
   VmrpEngine({this.screenWidth = 240, this.screenHeight = 320});
 
+  bool _ensureBindings() {
+    if (_bindings != null) return true;
+    try {
+      _bindings = VmrpBindings();
+      return true;
+    } catch (e) {
+      lastError = 'Failed to load vmrp library: $e';
+      return false;
+    }
+  }
+
   int init() {
-    return _bindings.init(screenWidth, screenHeight);
+    if (!_ensureBindings()) return -1;
+    try {
+      final ret = _bindings!.init(screenWidth, screenHeight);
+      if (ret != 0) {
+        lastError = 'vmrp_api_init returned $ret';
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_init crashed: $e';
+      return -1;
+    }
   }
 
   int start(String mrpPath, {String ext = 'start.mr', String? entry}) {
+    if (_bindings == null) {
+      lastError = 'Engine not initialized';
+      return -1;
+    }
     final pPath = mrpPath.toNativeUtf8();
     final pExt = ext.toNativeUtf8();
     final pEntry = entry?.toNativeUtf8() ?? nullptr;
 
-    final ret = _bindings.start(pPath.cast(), pExt.cast(), pEntry.cast());
+    try {
+      final ret = _bindings!.start(pPath.cast(), pExt.cast(), pEntry.cast());
 
-    malloc.free(pPath);
-    malloc.free(pExt);
-    if (pEntry != nullptr) malloc.free(pEntry);
+      malloc.free(pPath);
+      malloc.free(pExt);
+      if (pEntry != nullptr) malloc.free(pEntry);
 
-    if (ret == 0) {
-      _running = true;
-      _scheduleTimer();
+      if (ret == 0) {
+        _running = true;
+        _scheduleTimer();
+      } else {
+        lastError = 'vmrp_api_start returned $ret';
+      }
+      return ret;
+    } catch (e) {
+      malloc.free(pPath);
+      malloc.free(pExt);
+      if (pEntry != nullptr) malloc.free(pEntry);
+      lastError = 'vmrp_api_start crashed: $e';
+      return -1;
     }
-    return ret;
   }
 
   void sendTouchDown(int x, int y) {
-    _bindings.event(VmrpEvent.mouseDown, x, y);
+    if (!_running) return;
+    _bindings!.event(VmrpEvent.mouseDown, x, y);
     _checkState();
   }
 
   void sendTouchUp(int x, int y) {
-    _bindings.event(VmrpEvent.mouseUp, x, y);
+    if (!_running) return;
+    _bindings!.event(VmrpEvent.mouseUp, x, y);
     _checkState();
   }
 
   void sendTouchMove(int x, int y) {
-    _bindings.event(VmrpEvent.mouseMove, x, y);
+    if (!_running) return;
+    _bindings!.event(VmrpEvent.mouseMove, x, y);
     _checkState();
   }
 
   void sendKeyDown(int keyCode) {
-    _bindings.event(VmrpEvent.keyPress, keyCode, 0);
+    if (!_running) return;
+    _bindings!.event(VmrpEvent.keyPress, keyCode, 0);
     _checkState();
   }
 
   void sendKeyUp(int keyCode) {
-    _bindings.event(VmrpEvent.keyRelease, keyCode, 0);
+    if (!_running) return;
+    _bindings!.event(VmrpEvent.keyRelease, keyCode, 0);
     _checkState();
   }
 
   Uint8List? getScreenRGBA() {
-    final ptr = _bindings.getScreenBuffer();
+    if (_bindings == null) return null;
+    final ptr = _bindings!.getScreenBuffer();
     if (ptr == nullptr) return null;
 
     final pixelCount = screenWidth * screenHeight;
@@ -121,14 +163,16 @@ class VmrpEngine {
   }
 
   void confirmEdit(String text) {
+    if (_bindings == null) return;
     final pText = text.toNativeUtf8();
-    _bindings.setEditText(pText.cast());
+    _bindings!.setEditText(pText.cast());
     malloc.free(pText);
     _checkState();
   }
 
   void cancelEdit() {
-    _bindings.cancelEdit();
+    if (_bindings == null) return;
+    _bindings!.cancelEdit();
     _checkState();
   }
 
@@ -136,16 +180,17 @@ class VmrpEngine {
     _timer?.cancel();
     _timer = null;
     _running = false;
-    _bindings.destroy();
+    _bindings?.destroy();
     _onScreenUpdate.close();
     _onEditRequest.close();
   }
 
   void _checkState() {
-    if (_bindings.getScreenDirty() != 0) {
+    if (_bindings == null) return;
+    if (_bindings!.getScreenDirty() != 0) {
       _onScreenUpdate.add(null);
     }
-    if (_bindings.isEditActive() != 0) {
+    if (_bindings!.isEditActive() != 0) {
       _onEditRequest.add(null);
     }
     _scheduleTimer();
@@ -154,13 +199,13 @@ class VmrpEngine {
   void _scheduleTimer() {
     _timer?.cancel();
     _timer = null;
-    if (!_running) return;
+    if (!_running || _bindings == null) return;
 
-    final ms = _bindings.getTimerInterval();
+    final ms = _bindings!.getTimerInterval();
     if (ms > 0) {
       _timer = Timer(Duration(milliseconds: ms), () {
         if (!_running) return;
-        _bindings.timer();
+        _bindings?.timer();
         _checkState();
       });
     }

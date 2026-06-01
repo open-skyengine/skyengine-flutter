@@ -59,9 +59,15 @@ class VmrpBindings {
   late final _VmrpApiCancelEditDart cancelEdit;
 
   VmrpBindings() {
-    _lib = Platform.isAndroid
-        ? DynamicLibrary.open('libvmrp.so')
-        : DynamicLibrary.process();
+    if (Platform.isAndroid || Platform.isLinux) {
+      _lib = DynamicLibrary.open('libvmrp.so');
+    } else if (Platform.isWindows) {
+      _lib = DynamicLibrary.open('vmrp.dll');
+    } else if (Platform.isMacOS) {
+      _lib = DynamicLibrary.open('libvmrp.dylib');
+    } else {
+      _lib = DynamicLibrary.process();
+    }
 
     init = _lib.lookupFunction<_VmrpApiInitC, _VmrpApiInitDart>('vmrp_api_init');
     start = _lib.lookupFunction<_VmrpApiStartC, _VmrpApiStartDart>('vmrp_api_start');

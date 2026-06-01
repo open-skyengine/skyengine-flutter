@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
@@ -19,23 +20,52 @@ class MrpPlayerPage extends StatefulWidget {
 }
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
-  late final VmrpEngine _engine;
+  VmrpEngine? _engine;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _engine = VmrpEngine(
+    Future.delayed(Duration.zero, _startEngine);
+  }
+
+  void _startEngine() {
+    final file = File(widget.mrpPath);
+    if (!file.existsSync()) {
+      setState(() => _error = 'MRP file not found:\n${widget.mrpPath}');
+      return;
+    }
+
+    debugPrint('[VMRP] mrpPath: ${widget.mrpPath}');
+    debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
+
+    final engine = VmrpEngine(
       screenWidth: widget.screenWidth,
       screenHeight: widget.screenHeight,
     );
-    _engine.init();
-    _engine.start(widget.mrpPath);
-    _engine.onEditRequest.listen((_) => _showEditDialog());
+
+    final initRet = engine.init();
+    debugPrint('[VMRP] init() returned $initRet');
+    if (initRet != 0) {
+      setState(() => _error = 'Engine init failed: ${engine.lastError}');
+      return;
+    }
+
+    final startRet = engine.start(widget.mrpPath);
+    debugPrint('[VMRP] start() returned $startRet');
+    if (startRet != 0) {
+      setState(() => _error = 'Engine start failed: ${engine.lastError}');
+      engine.dispose();
+      return;
+    }
+
+    engine.onEditRequest.listen((_) => _showEditDialog());
+    setState(() => _engine = engine);
   }
 
   @override
   void dispose() {
-    _engine.dispose();
+    _engine?.dispose();
     super.dispose();
   }
 
@@ -62,9 +92,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     );
 
     if (result != null) {
-      _engine.confirmEdit(result);
+      _engine?.confirmEdit(result);
     } else {
-      _engine.cancelEdit();
+      _engine?.cancelEdit();
     }
   }
 
@@ -72,16 +102,37 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('VMRP')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            VmrpWidget(engine: _engine, scale: 2.0),
-            const SizedBox(height: 16),
-            _buildKeypad(),
-          ],
-        ),
-      ),
+      body: _error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('返回'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _engine == null
+              ? const Center(child: CircularProgressIndicator())
+              : Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      VmrpWidget(engine: _engine!, scale: 2.0),
+                      const SizedBox(height: 16),
+                      _buildKeypad(),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -118,8 +169,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   Widget _keyButton(String label, int keyCode) {
     return GestureDetector(
-      onTapDown: (_) => _engine.sendKeyDown(keyCode),
-      onTapUp: (_) => _engine.sendKeyUp(keyCode),
+      onTapDown: (_) => _engine?.sendKeyDown(keyCode),
+      onTapUp: (_) => _engine?.sendKeyUp(keyCode),
       child: Container(
         width: 80,
         margin: const EdgeInsets.all(4),
