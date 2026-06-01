@@ -28,6 +28,23 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments += "-DVMRP_BUILD_SHARED_ONLY=ON"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("../../vmrp/CMakeLists.txt")
+            version = "3.18.1+"
+        }
     }
 
     buildTypes {
