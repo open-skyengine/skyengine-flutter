@@ -2,61 +2,65 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 
-typedef _VmrpApiInitC = Int32 Function(Int32, Int32);
-typedef _VmrpApiInitDart = int Function(int, int);
+typedef VmrpApiInitC = Int32 Function(Int32, Int32);
+typedef VmrpApiInitDart = int Function(int, int);
 
-typedef _VmrpApiStartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
-typedef _VmrpApiStartDart = int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
+typedef VmrpApiStartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
+typedef VmrpApiStartDart = int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 
-typedef _VmrpApiDestroyC = Void Function();
-typedef _VmrpApiDestroyDart = void Function();
+typedef VmrpApiDestroyC = Void Function();
+typedef VmrpApiDestroyDart = void Function();
 
-typedef _VmrpApiEventC = Int32 Function(Int32, Int32, Int32);
-typedef _VmrpApiEventDart = int Function(int, int, int);
+typedef VmrpApiIsRunningC = Int32 Function();
+typedef VmrpApiIsRunningDart = int Function();
 
-typedef _VmrpApiTimerC = Int32 Function();
-typedef _VmrpApiTimerDart = int Function();
+typedef VmrpApiEventC = Int32 Function(Int32, Int32, Int32);
+typedef VmrpApiEventDart = int Function(int, int, int);
 
-typedef _VmrpApiGetTimerIntervalC = Int32 Function();
-typedef _VmrpApiGetTimerIntervalDart = int Function();
+typedef VmrpApiTimerC = Int32 Function();
+typedef VmrpApiTimerDart = int Function();
 
-typedef _VmrpApiGetScreenBufferC = Pointer<Uint16> Function();
-typedef _VmrpApiGetScreenBufferDart = Pointer<Uint16> Function();
+typedef VmrpApiGetTimerIntervalC = Int32 Function();
+typedef VmrpApiGetTimerIntervalDart = int Function();
 
-typedef _VmrpApiGetScreenDirtyC = Int32 Function();
-typedef _VmrpApiGetScreenDirtyDart = int Function();
+typedef VmrpApiGetScreenBufferC = Pointer<Uint16> Function();
+typedef VmrpApiGetScreenBufferDart = Pointer<Uint16> Function();
 
-typedef _VmrpApiGetScreenWidthC = Int32 Function();
-typedef _VmrpApiGetScreenWidthDart = int Function();
+typedef VmrpApiGetScreenDirtyC = Int32 Function();
+typedef VmrpApiGetScreenDirtyDart = int Function();
 
-typedef _VmrpApiGetScreenHeightC = Int32 Function();
-typedef _VmrpApiGetScreenHeightDart = int Function();
+typedef VmrpApiGetScreenWidthC = Int32 Function();
+typedef VmrpApiGetScreenWidthDart = int Function();
 
-typedef _VmrpApiIsEditActiveC = Int32 Function();
-typedef _VmrpApiIsEditActiveDart = int Function();
+typedef VmrpApiGetScreenHeightC = Int32 Function();
+typedef VmrpApiGetScreenHeightDart = int Function();
 
-typedef _VmrpApiSetEditTextC = Int32 Function(Pointer<Utf8>);
-typedef _VmrpApiSetEditTextDart = int Function(Pointer<Utf8>);
+typedef VmrpApiIsEditActiveC = Int32 Function();
+typedef VmrpApiIsEditActiveDart = int Function();
 
-typedef _VmrpApiCancelEditC = Int32 Function();
-typedef _VmrpApiCancelEditDart = int Function();
+typedef VmrpApiSetEditTextC = Int32 Function(Pointer<Utf8>);
+typedef VmrpApiSetEditTextDart = int Function(Pointer<Utf8>);
+
+typedef VmrpApiCancelEditC = Int32 Function();
+typedef VmrpApiCancelEditDart = int Function();
 
 class VmrpBindings {
   late final DynamicLibrary _lib;
 
-  late final _VmrpApiInitDart init;
-  late final _VmrpApiStartDart start;
-  late final _VmrpApiDestroyDart destroy;
-  late final _VmrpApiEventDart event;
-  late final _VmrpApiTimerDart timer;
-  late final _VmrpApiGetTimerIntervalDart getTimerInterval;
-  late final _VmrpApiGetScreenBufferDart getScreenBuffer;
-  late final _VmrpApiGetScreenDirtyDart getScreenDirty;
-  late final _VmrpApiGetScreenWidthDart getScreenWidth;
-  late final _VmrpApiGetScreenHeightDart getScreenHeight;
-  late final _VmrpApiIsEditActiveDart isEditActive;
-  late final _VmrpApiSetEditTextDart setEditText;
-  late final _VmrpApiCancelEditDart cancelEdit;
+  late final VmrpApiInitDart init;
+  late final VmrpApiStartDart start;
+  late final VmrpApiDestroyDart destroy;
+  late final VmrpApiIsRunningDart isRunning;
+  late final VmrpApiEventDart event;
+  late final VmrpApiTimerDart timer;
+  late final VmrpApiGetTimerIntervalDart getTimerInterval;
+  late final VmrpApiGetScreenBufferDart getScreenBuffer;
+  late final VmrpApiGetScreenDirtyDart getScreenDirty;
+  late final VmrpApiGetScreenWidthDart getScreenWidth;
+  late final VmrpApiGetScreenHeightDart getScreenHeight;
+  late final VmrpApiIsEditActiveDart isEditActive;
+  late final VmrpApiSetEditTextDart setEditText;
+  late final VmrpApiCancelEditDart cancelEdit;
 
   VmrpBindings() {
     if (Platform.isAndroid || Platform.isLinux) {
@@ -69,18 +73,19 @@ class VmrpBindings {
       _lib = DynamicLibrary.process();
     }
 
-    init = _lib.lookupFunction<_VmrpApiInitC, _VmrpApiInitDart>('vmrp_api_init');
-    start = _lib.lookupFunction<_VmrpApiStartC, _VmrpApiStartDart>('vmrp_api_start');
-    destroy = _lib.lookupFunction<_VmrpApiDestroyC, _VmrpApiDestroyDart>('vmrp_api_destroy');
-    event = _lib.lookupFunction<_VmrpApiEventC, _VmrpApiEventDart>('vmrp_api_event');
-    timer = _lib.lookupFunction<_VmrpApiTimerC, _VmrpApiTimerDart>('vmrp_api_timer');
-    getTimerInterval = _lib.lookupFunction<_VmrpApiGetTimerIntervalC, _VmrpApiGetTimerIntervalDart>('vmrp_api_get_timer_interval');
-    getScreenBuffer = _lib.lookupFunction<_VmrpApiGetScreenBufferC, _VmrpApiGetScreenBufferDart>('vmrp_api_get_screen_buffer');
-    getScreenDirty = _lib.lookupFunction<_VmrpApiGetScreenDirtyC, _VmrpApiGetScreenDirtyDart>('vmrp_api_get_screen_dirty');
-    getScreenWidth = _lib.lookupFunction<_VmrpApiGetScreenWidthC, _VmrpApiGetScreenWidthDart>('vmrp_api_get_screen_width');
-    getScreenHeight = _lib.lookupFunction<_VmrpApiGetScreenHeightC, _VmrpApiGetScreenHeightDart>('vmrp_api_get_screen_height');
-    isEditActive = _lib.lookupFunction<_VmrpApiIsEditActiveC, _VmrpApiIsEditActiveDart>('vmrp_api_is_edit_active');
-    setEditText = _lib.lookupFunction<_VmrpApiSetEditTextC, _VmrpApiSetEditTextDart>('vmrp_api_set_edit_text');
-    cancelEdit = _lib.lookupFunction<_VmrpApiCancelEditC, _VmrpApiCancelEditDart>('vmrp_api_cancel_edit');
+    init = _lib.lookupFunction<VmrpApiInitC, VmrpApiInitDart>('vmrp_api_init');
+    start = _lib.lookupFunction<VmrpApiStartC, VmrpApiStartDart>('vmrp_api_start');
+    destroy = _lib.lookupFunction<VmrpApiDestroyC, VmrpApiDestroyDart>('vmrp_api_destroy');
+    isRunning = _lib.lookupFunction<VmrpApiIsRunningC, VmrpApiIsRunningDart>('vmrp_api_is_running');
+    event = _lib.lookupFunction<VmrpApiEventC, VmrpApiEventDart>('vmrp_api_event');
+    timer = _lib.lookupFunction<VmrpApiTimerC, VmrpApiTimerDart>('vmrp_api_timer');
+    getTimerInterval = _lib.lookupFunction<VmrpApiGetTimerIntervalC, VmrpApiGetTimerIntervalDart>('vmrp_api_get_timer_interval');
+    getScreenBuffer = _lib.lookupFunction<VmrpApiGetScreenBufferC, VmrpApiGetScreenBufferDart>('vmrp_api_get_screen_buffer');
+    getScreenDirty = _lib.lookupFunction<VmrpApiGetScreenDirtyC, VmrpApiGetScreenDirtyDart>('vmrp_api_get_screen_dirty');
+    getScreenWidth = _lib.lookupFunction<VmrpApiGetScreenWidthC, VmrpApiGetScreenWidthDart>('vmrp_api_get_screen_width');
+    getScreenHeight = _lib.lookupFunction<VmrpApiGetScreenHeightC, VmrpApiGetScreenHeightDart>('vmrp_api_get_screen_height');
+    isEditActive = _lib.lookupFunction<VmrpApiIsEditActiveC, VmrpApiIsEditActiveDart>('vmrp_api_is_edit_active');
+    setEditText = _lib.lookupFunction<VmrpApiSetEditTextC, VmrpApiSetEditTextDart>('vmrp_api_set_edit_text');
+    cancelEdit = _lib.lookupFunction<VmrpApiCancelEditC, VmrpApiCancelEditDart>('vmrp_api_cancel_edit');
   }
 }

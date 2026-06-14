@@ -22,6 +22,7 @@ class MrpPlayerPage extends StatefulWidget {
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   VmrpEngine? _engine;
   String? _error;
+  bool _exiting = false;
 
   @override
   void initState() {
@@ -60,6 +61,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     }
 
     engine.onEditRequest.listen((_) => _showEditDialog());
+    engine.onExit.listen((_) => _closePlayer());
     setState(() => _engine = engine);
   }
 
@@ -96,6 +98,12 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     } else {
       _engine?.cancelEdit();
     }
+  }
+
+  void _closePlayer() {
+    if (_exiting || !mounted) return;
+    _exiting = true;
+    Navigator.of(context).pop();
   }
 
   @override

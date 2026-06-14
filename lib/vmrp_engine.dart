@@ -51,6 +51,9 @@ class VmrpEngine {
   final StreamController<void> _onEditRequest = StreamController.broadcast();
   Stream<void> get onEditRequest => _onEditRequest.stream;
 
+  final StreamController<void> _onExit = StreamController.broadcast();
+  Stream<void> get onExit => _onExit.stream;
+
   VmrpEngine({this.screenWidth = 240, this.screenHeight = 320});
 
   bool _ensureBindings() {
@@ -96,7 +99,11 @@ class VmrpEngine {
 
       if (ret == 0) {
         _running = true;
-        _scheduleTimer();
+        if (_bindings!.isRunning() == 0) {
+          scheduleMicrotask(_markExited);
+        } else {
+          _scheduleTimer();
+        }
       } else {
         lastError = 'vmrp_api_start returned $ret';
       }
@@ -183,10 +190,15 @@ class VmrpEngine {
     _bindings?.destroy();
     _onScreenUpdate.close();
     _onEditRequest.close();
+    _onExit.close();
   }
 
   void _checkState() {
     if (_bindings == null) return;
+    if (_bindings!.isRunning() == 0) {
+      _markExited();
+      return;
+    }
     if (_bindings!.getScreenDirty() != 0) {
       _onScreenUpdate.add(null);
     }
@@ -206,8 +218,22 @@ class VmrpEngine {
       _timer = Timer(Duration(milliseconds: ms), () {
         if (!_running) return;
         _bindings?.timer();
+        if (_bindings?.isRunning() == 0) {
+          _markExited();
+          return;
+        }
         _checkState();
       });
+    }
+  }
+
+  void _markExited() {
+    if (!_running) return;
+    _timer?.cancel();
+    _timer = null;
+    _running = false;
+    if (!_onExit.isClosed) {
+      _onExit.add(null);
     }
   }
 }
