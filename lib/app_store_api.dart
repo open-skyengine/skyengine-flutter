@@ -4,7 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-const String kDefaultAppStoreBaseUrl = 'http://127.0.0.1:8080/api/app/v1';
+const String kDefaultAppStoreBaseUrl = 'http://mrp.jysafe.cn/api/app/v1';
 const String kDefaultAppStoreKey = 'dev-app-key';
 const String kDefaultAppStoreSecret = 'dev-app-secret-change-me';
 
