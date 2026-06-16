@@ -24,6 +24,8 @@ class VmrpWidget extends StatefulWidget {
 class _VmrpWidgetState extends State<VmrpWidget> {
   StreamSubscription? _sub;
   ui.Image? _screenImage;
+  int? _activePointer;
+  Offset? _lastTouchPoint;
 
   VmrpEngine get engine => widget.engine;
 
@@ -71,10 +73,54 @@ class _VmrpWidgetState extends State<VmrpWidget> {
 
   Offset _toMrpCoords(Offset localPos) {
     final scale = _paintScale;
+    final x = (localPos.dx / scale).floor().clamp(0, engine.screenWidth - 1);
+    final y = (localPos.dy / scale).floor().clamp(0, engine.screenHeight - 1);
     return Offset(
-      localPos.dx / scale,
-      localPos.dy / scale,
+      x.toDouble(),
+      y.toDouble(),
     );
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_activePointer != null) {
+      return;
+    }
+    _activePointer = event.pointer;
+    final p = _toMrpCoords(event.localPosition);
+    _lastTouchPoint = p;
+    engine.sendTouchDown(p.dx.toInt(), p.dy.toInt());
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _activePointer) {
+      return;
+    }
+    final p = _toMrpCoords(event.localPosition);
+    _lastTouchPoint = p;
+    engine.sendTouchMove(p.dx.toInt(), p.dy.toInt());
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (event.pointer != _activePointer) {
+      return;
+    }
+    final p = _toMrpCoords(event.localPosition);
+    _lastTouchPoint = p;
+    engine.sendTouchUp(p.dx.toInt(), p.dy.toInt());
+    _activePointer = null;
+    _lastTouchPoint = null;
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (event.pointer != _activePointer) {
+      return;
+    }
+    final p = _lastTouchPoint;
+    if (p != null) {
+      engine.sendTouchUp(p.dx.toInt(), p.dy.toInt());
+    }
+    _activePointer = null;
+    _lastTouchPoint = null;
   }
 
   @override
@@ -83,26 +129,12 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     final h = widget.height ?? engine.screenHeight * widget.scale;
     final paintScale = _paintScale;
 
-    return GestureDetector(
-      onPanStart: (d) {
-        final p = _toMrpCoords(d.localPosition);
-        engine.sendTouchDown(p.dx.toInt(), p.dy.toInt());
-      },
-      onPanUpdate: (d) {
-        final p = _toMrpCoords(d.localPosition);
-        engine.sendTouchMove(p.dx.toInt(), p.dy.toInt());
-      },
-      onPanEnd: (d) {
-        engine.sendTouchUp(0, 0);
-      },
-      onTapDown: (d) {
-        final p = _toMrpCoords(d.localPosition);
-        engine.sendTouchDown(p.dx.toInt(), p.dy.toInt());
-      },
-      onTapUp: (d) {
-        final p = _toMrpCoords(d.localPosition);
-        engine.sendTouchUp(p.dx.toInt(), p.dy.toInt());
-      },
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
       child: SizedBox(
         width: w,
         height: h,

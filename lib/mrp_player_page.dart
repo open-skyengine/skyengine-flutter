@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'android_vibration.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
@@ -535,9 +536,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   }
 
   void _handleVirtualKeyDown(int keyCode) {
-    if (Platform.isAndroid) {
-      HapticFeedback.lightImpact();
-    }
+    AndroidVibration.keyPress();
     _engine?.sendKeyDown(keyCode);
     _keyboardFocusNode.requestFocus();
   }
