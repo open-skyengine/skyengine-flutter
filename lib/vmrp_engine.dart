@@ -43,6 +43,7 @@ class VmrpEngine {
 
   Timer? _timer;
   bool _running = false;
+  bool _disposed = false;
   String? lastError;
 
   final StreamController<void> _onScreenUpdate = StreamController.broadcast();
@@ -57,6 +58,10 @@ class VmrpEngine {
   VmrpEngine({this.screenWidth = 240, this.screenHeight = 320});
 
   bool _ensureBindings() {
+    if (_disposed) {
+      lastError = 'Engine already disposed';
+      return false;
+    }
     if (_bindings != null) return true;
     try {
       _bindings = VmrpBindings();
@@ -82,6 +87,10 @@ class VmrpEngine {
   }
 
   int start(String mrpPath, {String ext = 'start.mr', String? entry}) {
+    if (_disposed) {
+      lastError = 'Engine already disposed';
+      return -1;
+    }
     if (_bindings == null) {
       lastError = 'Engine not initialized';
       return -1;
@@ -184,10 +193,15 @@ class VmrpEngine {
   }
 
   void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
     _timer?.cancel();
     _timer = null;
     _running = false;
     _bindings?.destroy();
+    _bindings = null;
     _onScreenUpdate.close();
     _onEditRequest.close();
     _onExit.close();

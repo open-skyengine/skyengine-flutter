@@ -23,6 +23,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   VmrpEngine? _engine;
   String? _error;
   bool _exiting = false;
+  bool _disposedEngine = false;
 
   @override
   void initState() {
@@ -31,6 +32,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   }
 
   void _startEngine() {
+    if (!mounted || _disposedEngine) {
+      return;
+    }
     final file = File(widget.mrpPath);
     if (!file.existsSync()) {
       setState(() => _error = 'MRP file not found:\n${widget.mrpPath}');
@@ -49,6 +53,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     debugPrint('[VMRP] init() returned $initRet');
     if (initRet != 0) {
       setState(() => _error = 'Engine init failed: ${engine.lastError}');
+      engine.dispose();
       return;
     }
 
@@ -67,7 +72,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   @override
   void dispose() {
-    _engine?.dispose();
+    _shutdownEngine();
     super.dispose();
   }
 
@@ -103,44 +108,79 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   void _closePlayer() {
     if (_exiting || !mounted) return;
     _exiting = true;
+    _shutdownEngine();
     Navigator.of(context).pop();
+  }
+
+  void _handleBack() {
+    if (_exiting || !mounted) {
+      return;
+    }
+    _exiting = true;
+    _shutdownEngine();
+    Navigator.of(context).pop();
+  }
+
+  void _shutdownEngine() {
+    if (_disposedEngine) {
+      return;
+    }
+    _disposedEngine = true;
+    final engine = _engine;
+    _engine = null;
+    engine?.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('VMRP')),
-      body: _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(_error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('返回'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : _engine == null
-              ? const Center(child: CircularProgressIndicator())
-              : Center(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _shutdownEngine();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('VMRP'),
+          leading: BackButton(onPressed: _handleBack),
+        ),
+        body: _error != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      VmrpWidget(engine: _engine!, scale: 2.0),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
                       const SizedBox(height: 16),
-                      _buildKeypad(),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _handleBack,
+                        child: const Text('返回'),
+                      ),
                     ],
                   ),
                 ),
+              )
+            : _engine == null
+            ? const Center(child: CircularProgressIndicator())
+            : Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    VmrpWidget(engine: _engine!, scale: 2.0),
+                    const SizedBox(height: 16),
+                    _buildKeypad(),
+                  ],
+                ),
+              ),
+      ),
     );
   }
 
