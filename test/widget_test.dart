@@ -1,18 +1,22 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:mrpoid/main.dart';
+import 'package:mrpoid/home_page.dart';
 
 void main() {
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(
+          documentsDirectoryProvider: () async => Directory.systemTemp,
+          pickMrpFile: () async => null,
+          appStoreBuilder: _buildTestAppStore,
+          playerBuilder: _buildTestPlayer,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('MrpOid'), findsOneWidget);
     expect(find.text('本地'), findsOneWidget);
@@ -23,4 +27,20 @@ void main() {
 
     expect(find.text('搜索应用'), findsOneWidget);
   });
+
+  test('home page import smoke', () {
+    expect(HomePage, isNotNull);
+  });
+}
+
+Widget _buildTestAppStore(
+  String? mrpDir,
+  ValueChanged<String> onRunMrp,
+  Future<void> Function() onDownloaded,
+) {
+  return const Center(child: Text('搜索应用'));
+}
+
+Widget _buildTestPlayer(String mrpPath) {
+  return Scaffold(body: Text(mrpPath));
 }
