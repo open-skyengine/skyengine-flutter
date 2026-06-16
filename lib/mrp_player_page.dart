@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
@@ -21,6 +22,7 @@ class MrpPlayerPage extends StatefulWidget {
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   VmrpEngine? _engine;
+  final FocusNode _keyboardFocusNode = FocusNode();
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
@@ -28,6 +30,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _keyboardFocusNode.requestFocus();
+      }
+    });
     Future.delayed(Duration.zero, _startEngine);
   }
 
@@ -68,12 +75,58 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     engine.onEditRequest.listen((_) => _showEditDialog());
     engine.onExit.listen((_) => _closePlayer());
     setState(() => _engine = engine);
+    _keyboardFocusNode.requestFocus();
   }
 
   @override
   void dispose() {
     _shutdownEngine();
+    _keyboardFocusNode.dispose();
     super.dispose();
+  }
+
+  int? _keyCodeForLogicalKey(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW) {
+      return VmrpKey.up;
+    }
+    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS) {
+      return VmrpKey.down;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
+      return VmrpKey.left;
+    }
+    if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyD) {
+      return VmrpKey.right;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+      return VmrpKey.select;
+    }
+    if (key == LogicalKeyboardKey.keyQ) {
+      return VmrpKey.softLeft;
+    }
+    if (key == LogicalKeyboardKey.keyE) {
+      return VmrpKey.softRight;
+    }
+    return null;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final engine = _engine;
+    if (engine == null) {
+      return KeyEventResult.ignored;
+    }
+
+    final keyCode = _keyCodeForLogicalKey(event.logicalKey);
+    if (keyCode == null) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event is KeyDownEvent) {
+      engine.sendKeyDown(keyCode);
+    } else if (event is KeyUpEvent) {
+      engine.sendKeyUp(keyCode);
+    }
+    return KeyEventResult.handled;
   }
 
   Future<void> _showEditDialog() async {
@@ -145,41 +198,66 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
           title: const Text('VMRP'),
           leading: BackButton(onPressed: _handleBack),
         ),
-        body: _error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _handleBack,
-                        child: const Text('返回'),
-                      ),
-                    ],
+        body: Focus(
+          focusNode: _keyboardFocusNode,
+          autofocus: true,
+          onKeyEvent: _handleKeyEvent,
+          child: _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _handleBack,
+                          child: const Text('返回'),
+                        ),
+                      ],
+                    ),
                   ),
+                )
+              : _engine == null
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    const keypadHeight = 148.0;
+                    const gap = 16.0;
+                    final maxScreenWidth = constraints.maxWidth;
+                    final maxScreenHeight = constraints.maxHeight - keypadHeight - gap;
+                    final scale = [
+                      maxScreenWidth / _engine!.screenWidth,
+                      maxScreenHeight > 0 ? maxScreenHeight / _engine!.screenHeight : 0.1,
+                      2.0,
+                    ].reduce((a, b) => a < b ? a : b);
+                    final screenWidth = _engine!.screenWidth * scale;
+                    final screenHeight = _engine!.screenHeight * scale;
+
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          VmrpWidget(
+                            engine: _engine!,
+                            width: screenWidth,
+                            height: screenHeight,
+                          ),
+                          const SizedBox(height: gap),
+                          _buildKeypad(),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-              )
-            : _engine == null
-            ? const Center(child: CircularProgressIndicator())
-            : Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    VmrpWidget(engine: _engine!, scale: 2.0),
-                    const SizedBox(height: 16),
-                    _buildKeypad(),
-                  ],
-                ),
-              ),
+        ),
       ),
     );
   }

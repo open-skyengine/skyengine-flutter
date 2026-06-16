@@ -6,11 +6,15 @@ import 'vmrp_engine.dart';
 class VmrpWidget extends StatefulWidget {
   final VmrpEngine engine;
   final double scale;
+  final double? width;
+  final double? height;
 
   const VmrpWidget({
     super.key,
     required this.engine,
     this.scale = 2.0,
+    this.width,
+    this.height,
   });
 
   @override
@@ -58,17 +62,26 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     }
   }
 
+  double get _paintScale {
+    if (widget.width != null) {
+      return widget.width! / engine.screenWidth;
+    }
+    return widget.scale;
+  }
+
   Offset _toMrpCoords(Offset localPos) {
+    final scale = _paintScale;
     return Offset(
-      localPos.dx / widget.scale,
-      localPos.dy / widget.scale,
+      localPos.dx / scale,
+      localPos.dy / scale,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final w = engine.screenWidth * widget.scale;
-    final h = engine.screenHeight * widget.scale;
+    final w = widget.width ?? engine.screenWidth * widget.scale;
+    final h = widget.height ?? engine.screenHeight * widget.scale;
+    final paintScale = _paintScale;
 
     return GestureDetector(
       onPanStart: (d) {
@@ -94,7 +107,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
         width: w,
         height: h,
         child: CustomPaint(
-          painter: _VmrpPainter(_screenImage, widget.scale),
+          painter: _VmrpPainter(_screenImage, paintScale),
           size: Size(w, h),
         ),
       ),
