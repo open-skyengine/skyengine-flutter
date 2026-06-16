@@ -38,3 +38,14 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+set(MYTHROAD_SYSTEM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../mythroad/system")
+if(EXISTS "${MYTHROAD_SYSTEM_DIR}")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:${BINARY_NAME}>/mythroad/system"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${BINARY_NAME}>/mythroad"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${MYTHROAD_SYSTEM_DIR}"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>/mythroad/system"
+    COMMENT "Copying Mythroad system resources")
+endif()
