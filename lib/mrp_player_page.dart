@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
+enum _KeypadMode { directional, numeric }
+
 class MrpPlayerPage extends StatefulWidget {
   final String mrpPath;
   final int screenWidth;
@@ -53,6 +55,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
+  _KeypadMode _keypadMode = _KeypadMode.directional;
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
@@ -448,6 +451,39 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   Widget _buildKeypad() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SegmentedButton<_KeypadMode>(
+          segments: const [
+            ButtonSegment(
+              value: _KeypadMode.directional,
+              icon: Icon(Icons.gamepad_outlined),
+              label: Text('方向键'),
+            ),
+            ButtonSegment(
+              value: _KeypadMode.numeric,
+              icon: Icon(Icons.dialpad_outlined),
+              label: Text('九键'),
+            ),
+          ],
+          selected: {_keypadMode},
+          onSelectionChanged: (selection) {
+            setState(() => _keypadMode = selection.first);
+            _keyboardFocusNode.requestFocus();
+          },
+        ),
+        const SizedBox(height: 8),
+        if (_keypadMode == _KeypadMode.directional)
+          _buildDirectionalKeypad()
+        else
+          _buildNumericKeypad(),
+      ],
+    );
+  }
+
+  Widget _buildDirectionalKeypad() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -477,6 +513,40 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     );
   }
 
+  Widget _buildNumericKeypad() {
+    const keys = [
+      [('1', VmrpKey.key1), ('2', VmrpKey.key2), ('3', VmrpKey.key3)],
+      [('4', VmrpKey.key4), ('5', VmrpKey.key5), ('6', VmrpKey.key6)],
+      [('7', VmrpKey.key7), ('8', VmrpKey.key8), ('9', VmrpKey.key9)],
+    ];
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final row in keys)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (final key in row) _keyButton(key.$1, key.$2),
+            ],
+          ),
+      ],
+    );
+  }
+
+  void _handleVirtualKeyDown(int keyCode) {
+    if (Platform.isAndroid) {
+      HapticFeedback.lightImpact();
+    }
+    _engine?.sendKeyDown(keyCode);
+    _keyboardFocusNode.requestFocus();
+  }
+
+  void _handleVirtualKeyUp(int keyCode) {
+    _engine?.sendKeyUp(keyCode);
+    _keyboardFocusNode.requestFocus();
+  }
+
   Widget _keyButton(String label, int keyCode) {
     return GestureDetector(
       onTapDown: (_) {
@@ -487,16 +557,20 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       onTapCancel: () => _engine?.sendKeyUp(keyCode),
       child: Container(
         width: 80,
+        height: 38,
         margin: const EdgeInsets.all(4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.grey[800],
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white),
+        alignment: Alignment.center,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
       ),
     );
