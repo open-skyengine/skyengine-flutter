@@ -5,8 +5,10 @@ import 'package:ffi/ffi.dart';
 typedef VmrpApiInitC = Int32 Function(Int32, Int32);
 typedef VmrpApiInitDart = int Function(int, int);
 
-typedef VmrpApiStartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
-typedef VmrpApiStartDart = int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
+typedef VmrpApiStartC =
+    Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
+typedef VmrpApiStartDart =
+    int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 
 typedef VmrpApiDestroyC = Void Function();
 typedef VmrpApiDestroyDart = void Function();
@@ -35,6 +37,21 @@ typedef VmrpApiGetScreenWidthDart = int Function();
 typedef VmrpApiGetScreenHeightC = Int32 Function();
 typedef VmrpApiGetScreenHeightDart = int Function();
 
+typedef VmrpApiAudioSampleRateC = Int32 Function();
+typedef VmrpApiAudioSampleRateDart = int Function();
+
+typedef VmrpApiAudioChannelsC = Int32 Function();
+typedef VmrpApiAudioChannelsDart = int Function();
+
+typedef VmrpApiAudioIsActiveC = Int32 Function();
+typedef VmrpApiAudioIsActiveDart = int Function();
+
+typedef VmrpApiAudioRenderS16leC = Int32 Function(Pointer<Void>, Int32);
+typedef VmrpApiAudioRenderS16leDart = int Function(Pointer<Void>, int);
+
+typedef VmrpApiAudioStopC = Void Function();
+typedef VmrpApiAudioStopDart = void Function();
+
 typedef VmrpApiIsEditActiveC = Int32 Function();
 typedef VmrpApiIsEditActiveDart = int Function();
 
@@ -58,6 +75,11 @@ class VmrpBindings {
   late final VmrpApiGetScreenDirtyDart getScreenDirty;
   late final VmrpApiGetScreenWidthDart getScreenWidth;
   late final VmrpApiGetScreenHeightDart getScreenHeight;
+  late final VmrpApiAudioSampleRateDart audioSampleRate;
+  late final VmrpApiAudioChannelsDart audioChannels;
+  late final VmrpApiAudioIsActiveDart audioIsActive;
+  late final VmrpApiAudioRenderS16leDart audioRenderS16le;
+  late final VmrpApiAudioStopDart audioStop;
   late final VmrpApiIsEditActiveDart isEditActive;
   late final VmrpApiSetEditTextDart setEditText;
   late final VmrpApiCancelEditDart cancelEdit;
@@ -74,18 +96,70 @@ class VmrpBindings {
     }
 
     init = _lib.lookupFunction<VmrpApiInitC, VmrpApiInitDart>('vmrp_api_init');
-    start = _lib.lookupFunction<VmrpApiStartC, VmrpApiStartDart>('vmrp_api_start');
-    destroy = _lib.lookupFunction<VmrpApiDestroyC, VmrpApiDestroyDart>('vmrp_api_destroy');
-    isRunning = _lib.lookupFunction<VmrpApiIsRunningC, VmrpApiIsRunningDart>('vmrp_api_is_running');
-    event = _lib.lookupFunction<VmrpApiEventC, VmrpApiEventDart>('vmrp_api_event');
-    timer = _lib.lookupFunction<VmrpApiTimerC, VmrpApiTimerDart>('vmrp_api_timer');
-    getTimerInterval = _lib.lookupFunction<VmrpApiGetTimerIntervalC, VmrpApiGetTimerIntervalDart>('vmrp_api_get_timer_interval');
-    getScreenBuffer = _lib.lookupFunction<VmrpApiGetScreenBufferC, VmrpApiGetScreenBufferDart>('vmrp_api_get_screen_buffer');
-    getScreenDirty = _lib.lookupFunction<VmrpApiGetScreenDirtyC, VmrpApiGetScreenDirtyDart>('vmrp_api_get_screen_dirty');
-    getScreenWidth = _lib.lookupFunction<VmrpApiGetScreenWidthC, VmrpApiGetScreenWidthDart>('vmrp_api_get_screen_width');
-    getScreenHeight = _lib.lookupFunction<VmrpApiGetScreenHeightC, VmrpApiGetScreenHeightDart>('vmrp_api_get_screen_height');
-    isEditActive = _lib.lookupFunction<VmrpApiIsEditActiveC, VmrpApiIsEditActiveDart>('vmrp_api_is_edit_active');
-    setEditText = _lib.lookupFunction<VmrpApiSetEditTextC, VmrpApiSetEditTextDart>('vmrp_api_set_edit_text');
-    cancelEdit = _lib.lookupFunction<VmrpApiCancelEditC, VmrpApiCancelEditDart>('vmrp_api_cancel_edit');
+    start = _lib.lookupFunction<VmrpApiStartC, VmrpApiStartDart>(
+      'vmrp_api_start',
+    );
+    destroy = _lib.lookupFunction<VmrpApiDestroyC, VmrpApiDestroyDart>(
+      'vmrp_api_destroy',
+    );
+    isRunning = _lib.lookupFunction<VmrpApiIsRunningC, VmrpApiIsRunningDart>(
+      'vmrp_api_is_running',
+    );
+    event = _lib.lookupFunction<VmrpApiEventC, VmrpApiEventDart>(
+      'vmrp_api_event',
+    );
+    timer = _lib.lookupFunction<VmrpApiTimerC, VmrpApiTimerDart>(
+      'vmrp_api_timer',
+    );
+    getTimerInterval = _lib
+        .lookupFunction<VmrpApiGetTimerIntervalC, VmrpApiGetTimerIntervalDart>(
+          'vmrp_api_get_timer_interval',
+        );
+    getScreenBuffer = _lib
+        .lookupFunction<VmrpApiGetScreenBufferC, VmrpApiGetScreenBufferDart>(
+          'vmrp_api_get_screen_buffer',
+        );
+    getScreenDirty = _lib
+        .lookupFunction<VmrpApiGetScreenDirtyC, VmrpApiGetScreenDirtyDart>(
+          'vmrp_api_get_screen_dirty',
+        );
+    getScreenWidth = _lib
+        .lookupFunction<VmrpApiGetScreenWidthC, VmrpApiGetScreenWidthDart>(
+          'vmrp_api_get_screen_width',
+        );
+    getScreenHeight = _lib
+        .lookupFunction<VmrpApiGetScreenHeightC, VmrpApiGetScreenHeightDart>(
+          'vmrp_api_get_screen_height',
+        );
+    audioSampleRate = _lib
+        .lookupFunction<VmrpApiAudioSampleRateC, VmrpApiAudioSampleRateDart>(
+          'vmrp_api_audio_sample_rate',
+        );
+    audioChannels = _lib
+        .lookupFunction<VmrpApiAudioChannelsC, VmrpApiAudioChannelsDart>(
+          'vmrp_api_audio_channels',
+        );
+    audioIsActive = _lib
+        .lookupFunction<VmrpApiAudioIsActiveC, VmrpApiAudioIsActiveDart>(
+          'vmrp_api_audio_is_active',
+        );
+    audioRenderS16le = _lib
+        .lookupFunction<VmrpApiAudioRenderS16leC, VmrpApiAudioRenderS16leDart>(
+          'vmrp_api_audio_render_s16le',
+        );
+    audioStop = _lib.lookupFunction<VmrpApiAudioStopC, VmrpApiAudioStopDart>(
+      'vmrp_api_audio_stop',
+    );
+    isEditActive = _lib
+        .lookupFunction<VmrpApiIsEditActiveC, VmrpApiIsEditActiveDart>(
+          'vmrp_api_is_edit_active',
+        );
+    setEditText = _lib
+        .lookupFunction<VmrpApiSetEditTextC, VmrpApiSetEditTextDart>(
+          'vmrp_api_set_edit_text',
+        );
+    cancelEdit = _lib.lookupFunction<VmrpApiCancelEditC, VmrpApiCancelEditDart>(
+      'vmrp_api_cancel_edit',
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
+import 'vmrp_audio_player.dart';
 import 'vmrp_bindings.dart';
 
 class VmrpEvent {
@@ -42,6 +43,7 @@ class VmrpEngine {
   final int screenHeight;
 
   Timer? _timer;
+  VmrpAudioPlayer? _audioPlayer;
   bool _running = false;
   bool _disposed = false;
   String? lastError;
@@ -65,6 +67,7 @@ class VmrpEngine {
     if (_bindings != null) return true;
     try {
       _bindings = VmrpBindings();
+      _audioPlayer = VmrpAudioPlayer(bindings: _bindings!);
       return true;
     } catch (e) {
       lastError = 'Failed to load vmrp library: $e';
@@ -113,6 +116,7 @@ class VmrpEngine {
         } else {
           _scheduleTimer();
         }
+        _wakeAudio();
       } else {
         lastError = 'vmrp_api_start returned $ret';
       }
@@ -200,6 +204,8 @@ class VmrpEngine {
     _timer?.cancel();
     _timer = null;
     _running = false;
+    unawaited(_audioPlayer?.dispose() ?? Future<void>.value());
+    _audioPlayer = null;
     _bindings?.destroy();
     _bindings = null;
     _onScreenUpdate.close();
@@ -219,6 +225,7 @@ class VmrpEngine {
     if (_bindings!.isEditActive() != 0) {
       _onEditRequest.add(null);
     }
+    _wakeAudio();
     _scheduleTimer();
   }
 
@@ -236,8 +243,22 @@ class VmrpEngine {
           _markExited();
           return;
         }
+        _wakeAudio();
         _checkState();
       });
+    }
+  }
+
+  void _wakeAudio() {
+    if (!_running) return;
+    try {
+      _audioPlayer?.wake();
+      final audioError = _audioPlayer?.lastError;
+      if (audioError != null) {
+        lastError = audioError;
+      }
+    } catch (e) {
+      lastError = 'Audio wake failed: $e';
     }
   }
 
@@ -246,6 +267,7 @@ class VmrpEngine {
     _timer?.cancel();
     _timer = null;
     _running = false;
+    unawaited(_audioPlayer?.stop() ?? Future<void>.value());
     if (!_onExit.isClosed) {
       _onExit.add(null);
     }
