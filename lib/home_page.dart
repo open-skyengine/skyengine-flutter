@@ -23,14 +23,14 @@ typedef AppStoreBuilder =
 typedef MrpPlayerBuilder = Widget Function(String mrpPath);
 
 class HomePage extends StatefulWidget {
-  final DocumentsDirectoryProvider documentsDirectoryProvider;
+  final DocumentsDirectoryProvider workingDirectoryProvider;
   final MrpFilePicker pickMrpFile;
   final AppStoreBuilder appStoreBuilder;
   final MrpPlayerBuilder playerBuilder;
 
   const HomePage({
     super.key,
-    required this.documentsDirectoryProvider,
+    required this.workingDirectoryProvider,
     required this.pickMrpFile,
     required this.appStoreBuilder,
     required this.playerBuilder,
@@ -55,13 +55,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadMrpFiles() async {
-    final dir = await widget.documentsDirectoryProvider();
-    final mrpDir = Directory('${dir.path}/mythroad');
+    final dir = await widget.workingDirectoryProvider();
+    final mrpDir = _mrpDirectoryForWorkDir(dir);
     if (!await mrpDir.exists()) {
       await mrpDir.create(recursive: true);
     }
     try {
-      await AndroidMythroadAssets.ensureSystem(mrpDir);
+      await AndroidMythroadAssets.ensureSystem(
+        Directory('${dir.path}/mythroad'),
+      );
     } catch (error, stackTrace) {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('Failed to prepare Mythroad system assets: $error');
@@ -73,6 +75,13 @@ class _HomePageState extends State<HomePage> {
       _mrpDir = mrpDir.path;
     });
     await _refreshFileList();
+  }
+
+  Directory _mrpDirectoryForWorkDir(Directory workDir) {
+    if (Platform.isAndroid) {
+      return workDir;
+    }
+    return Directory('${workDir.path}${Platform.pathSeparator}download');
   }
 
   Future<void> _refreshFileList() async {
