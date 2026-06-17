@@ -21,20 +21,52 @@ class MrpPlayerPage extends StatefulWidget {
   State<MrpPlayerPage> createState() => _MrpPlayerPageState();
 }
 
+class _ScreenResolution {
+  final int width;
+  final int height;
+
+  const _ScreenResolution(this.width, this.height);
+
+  String get label => '${width}x$height';
+
+  @override
+  bool operator ==(Object other) {
+    return other is _ScreenResolution &&
+        other.width == width &&
+        other.height == height;
+  }
+
+  @override
+  int get hashCode => Object.hash(width, height);
+}
+
+enum _PlayerMenuAction { toggleKeypad, switchResolution }
+
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const MethodChannel _hapticsChannel = MethodChannel('mrpoid/haptics');
   static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
+  static const List<_ScreenResolution> _commonResolutions = [
+    _ScreenResolution(240, 320),
+    _ScreenResolution(176, 220),
+    _ScreenResolution(128, 160),
+  ];
 
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
+  bool _showVirtualKeypad = true;
+  late _ScreenResolution _currentResolution;
   DateTime? _lastVirtualKeyHapticAt;
 
   @override
   void initState() {
     super.initState();
+    _currentResolution = _ScreenResolution(
+      widget.screenWidth,
+      widget.screenHeight,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _keyboardFocusNode.requestFocus();
@@ -57,8 +89,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
 
     final engine = VmrpEngine(
-      screenWidth: widget.screenWidth,
-      screenHeight: widget.screenHeight,
+      screenWidth: _currentResolution.width,
+      screenHeight: _currentResolution.height,
     );
 
     final initRet = engine.init();
@@ -77,8 +109,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
 
-    engine.onEditRequest.listen((_) => _showEditDialog());
-    engine.onExit.listen((_) => _closePlayer());
+    engine.onEditRequest.listen((_) {
+      if (identical(_engine, engine)) {
+        _showEditDialog();
+      }
+    });
+    engine.onExit.listen((_) {
+      if (identical(_engine, engine)) {
+        _closePlayer();
+      }
+    });
     setState(() => _engine = engine);
     _keyboardFocusNode.requestFocus();
   }
@@ -191,6 +231,77 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     engine?.dispose();
   }
 
+  void _disposeCurrentEngineForRestart() {
+    final engine = _engine;
+    _engine = null;
+    engine?.dispose();
+  }
+
+  void _handleMenuAction(_PlayerMenuAction action) {
+    switch (action) {
+      case _PlayerMenuAction.toggleKeypad:
+        setState(() {
+          _showVirtualKeypad = !_showVirtualKeypad;
+        });
+        _keyboardFocusNode.requestFocus();
+      case _PlayerMenuAction.switchResolution:
+        unawaited(_showResolutionDialog());
+    }
+  }
+
+  List<_ScreenResolution> get _resolutionOptions {
+    if (_commonResolutions.contains(_currentResolution)) {
+      return _commonResolutions;
+    }
+    return [_currentResolution, ..._commonResolutions];
+  }
+
+  Future<void> _showResolutionDialog() async {
+    final selected = await showDialog<_ScreenResolution>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: const Text('切换分辨率'),
+          children: [
+            for (final resolution in _resolutionOptions)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(resolution),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: resolution == _currentResolution
+                          ? const Icon(Icons.check, size: 20)
+                          : null,
+                    ),
+                    Text(resolution.label),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || selected == null || selected == _currentResolution) {
+      _keyboardFocusNode.requestFocus();
+      return;
+    }
+    _restartEngineWithResolution(selected);
+  }
+
+  void _restartEngineWithResolution(_ScreenResolution resolution) {
+    // vmrp_api_init() owns the screen buffer size, so changing resolution must
+    // recreate the engine before start() instead of only resizing the widget.
+    _disposeCurrentEngineForRestart();
+    setState(() {
+      _currentResolution = resolution;
+      _error = null;
+    });
+    Future.delayed(Duration.zero, _startEngine);
+    _keyboardFocusNode.requestFocus();
+  }
+
   Future<void> _vibrateVirtualKey() async {
     final now = DateTime.now();
     final last = _lastVirtualKeyHapticAt;
@@ -230,6 +341,41 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
         appBar: AppBar(
           title: const Text('VMRP'),
           leading: BackButton(onPressed: _handleBack),
+          actions: [
+            PopupMenuButton<_PlayerMenuAction>(
+              tooltip: '更多',
+              icon: const Icon(Icons.more_vert),
+              onSelected: _handleMenuAction,
+              itemBuilder: (context) {
+                return [
+                  PopupMenuItem(
+                    value: _PlayerMenuAction.toggleKeypad,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _showVirtualKeypad
+                              ? Icons.keyboard_hide
+                              : Icons.keyboard,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('切换键盘'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _PlayerMenuAction.switchResolution,
+                    child: Row(
+                      children: [
+                        Icon(Icons.aspect_ratio),
+                        SizedBox(width: 12),
+                        Text('切换分辨率'),
+                      ],
+                    ),
+                  ),
+                ];
+              },
+            ),
+          ],
         ),
         body: Focus(
           focusNode: _keyboardFocusNode,
@@ -262,8 +408,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    const keypadHeight = 148.0;
-                    const gap = 16.0;
+                    final keypadHeight = _showVirtualKeypad ? 148.0 : 0.0;
+                    final gap = _showVirtualKeypad ? 16.0 : 0.0;
                     final maxScreenWidth = constraints.maxWidth;
                     final maxScreenHeight =
                         constraints.maxHeight - keypadHeight - gap;
@@ -286,8 +432,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
                             width: screenWidth,
                             height: screenHeight,
                           ),
-                          const SizedBox(height: gap),
-                          _buildKeypad(),
+                          if (_showVirtualKeypad) ...[
+                            SizedBox(height: gap),
+                            _buildKeypad(),
+                          ],
                         ],
                       ),
                     );
