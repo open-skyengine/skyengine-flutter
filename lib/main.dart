@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       home: HomePage(
-        documentsDirectoryProvider: _getDocumentsDirectory,
+        workingDirectoryProvider: _getWorkingDirectory,
         pickMrpFile: _pickMrpFile,
         appStoreBuilder: (mrpDir, onRunMrp, onDownloaded) {
           return AppStorePage(
@@ -38,8 +38,16 @@ class MyApp extends StatelessWidget {
   }
 }
 
-Future<Directory> _getDocumentsDirectory() async {
+Future<Directory> _getWorkingDirectory() async {
   try {
+    if (Platform.isAndroid) {
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) {
+        return externalDir;
+      }
+    } else {
+      return File(Platform.resolvedExecutable).parent;
+    }
     return await getApplicationDocumentsDirectory();
   } catch (_) {
     return Directory.systemTemp.createTemp('mrpoid_docs_');

@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: HomePage(
-          documentsDirectoryProvider: () async => Directory.systemTemp,
+          workingDirectoryProvider: () async => Directory.systemTemp,
           pickMrpFile: () async => null,
           appStoreBuilder: _buildTestAppStore,
           playerBuilder: _buildTestPlayer,
