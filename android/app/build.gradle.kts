@@ -1,8 +1,19 @@
+import org.gradle.api.tasks.bundling.Zip
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val mythroadSystemAssetsDir = layout.buildDirectory.dir("generated/assets/mythroadSystem")
+val packageMythroadSystem by tasks.registering(Zip::class) {
+    archiveFileName.set("mythroad_system.zip")
+    destinationDirectory.set(mythroadSystemAssetsDir)
+    from("../../mythroad/system") {
+        into("system")
+    }
 }
 
 android {
@@ -50,7 +61,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    sourceSets {
+        getByName("main").assets.srcDir(mythroadSystemAssetsDir)
+    }
 }
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach {
+        dependsOn(packageMythroadSystem)
+    }
 
 flutter {
     source = "../.."

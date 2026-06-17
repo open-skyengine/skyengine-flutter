@@ -2,11 +2,18 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'android_vibration.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
-enum _KeypadMode { directional, numeric }
+enum _KeypadMode { directional, numeric, none }
+
+extension on _KeypadMode {
+  String get label => switch (this) {
+    _KeypadMode.directional => '方向键',
+    _KeypadMode.numeric => '9键',
+    _KeypadMode.none => '无键盘',
+  };
+}
 
 class MrpPlayerPage extends StatefulWidget {
   final String mrpPath;
@@ -43,7 +50,7 @@ class _ScreenResolution {
   int get hashCode => Object.hash(width, height);
 }
 
-enum _PlayerMenuAction { toggleKeypad, switchResolution }
+enum _PlayerMenuAction { switchKeyboard, switchResolution }
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const MethodChannel _hapticsChannel = MethodChannel('mrpoid/haptics');
@@ -60,7 +67,6 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
-  bool _showVirtualKeypad = true;
   late _ScreenResolution _currentResolution;
   DateTime? _lastVirtualKeyHapticAt;
 
@@ -91,6 +97,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
     debugPrint('[VMRP] mrpPath: ${widget.mrpPath}');
     debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
+    final workDir = _workDirForMrp(widget.mrpPath);
+    debugPrint('[VMRP] workDir: $workDir');
 
     final engine = VmrpEngine(
       screenWidth: _currentResolution.width,
@@ -105,7 +113,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
 
-    final startRet = engine.start(widget.mrpPath);
+    final startRet = engine.start(widget.mrpPath, workDir: workDir);
     debugPrint('[VMRP] start() returned $startRet');
     if (startRet != 0) {
       setState(() => _error = 'Engine start failed: ${engine.lastError}');
@@ -125,6 +133,15 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     });
     setState(() => _engine = engine);
     _keyboardFocusNode.requestFocus();
+  }
+
+  String _workDirForMrp(String mrpPath) {
+    final mrpParent = File(mrpPath).parent;
+    if (mrpParent.path.split(Platform.pathSeparator).last.toLowerCase() ==
+        'mythroad') {
+      return mrpParent.parent.path;
+    }
+    return mrpParent.path;
   }
 
   @override
@@ -243,14 +260,46 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   void _handleMenuAction(_PlayerMenuAction action) {
     switch (action) {
-      case _PlayerMenuAction.toggleKeypad:
-        setState(() {
-          _showVirtualKeypad = !_showVirtualKeypad;
-        });
-        _keyboardFocusNode.requestFocus();
+      case _PlayerMenuAction.switchKeyboard:
+        unawaited(_showKeyboardDialog());
       case _PlayerMenuAction.switchResolution:
         unawaited(_showResolutionDialog());
     }
+  }
+
+  Future<void> _showKeyboardDialog() async {
+    final selected = await showDialog<_KeypadMode>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: const Text('切换键盘'),
+          children: [
+            for (final mode in _KeypadMode.values)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(mode),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: mode == _keypadMode
+                          ? const Icon(Icons.check, size: 20)
+                          : null,
+                    ),
+                    Text(mode.label),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || selected == null || selected == _keypadMode) {
+      _keyboardFocusNode.requestFocus();
+      return;
+    }
+    setState(() => _keypadMode = selected);
+    _keyboardFocusNode.requestFocus();
   }
 
   List<_ScreenResolution> get _resolutionOptions {
@@ -353,11 +402,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
               itemBuilder: (context) {
                 return [
                   PopupMenuItem(
-                    value: _PlayerMenuAction.toggleKeypad,
+                    value: _PlayerMenuAction.switchKeyboard,
                     child: Row(
                       children: [
                         Icon(
-                          _showVirtualKeypad
+                          _keypadMode == _KeypadMode.none
                               ? Icons.keyboard_hide
                               : Icons.keyboard,
                         ),
@@ -412,8 +461,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    final keypadHeight = _showVirtualKeypad ? 148.0 : 0.0;
-                    final gap = _showVirtualKeypad ? 16.0 : 0.0;
+                    final hasVirtualKeypad = _keypadMode != _KeypadMode.none;
+                    final keypadHeight = hasVirtualKeypad ? 148.0 : 0.0;
+                    final gap = hasVirtualKeypad ? 16.0 : 0.0;
                     final maxScreenWidth = constraints.maxWidth;
                     final maxScreenHeight =
                         constraints.maxHeight - keypadHeight - gap;
@@ -436,7 +486,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
                             width: screenWidth,
                             height: screenHeight,
                           ),
-                          if (_showVirtualKeypad) ...[
+                          if (hasVirtualKeypad) ...[
                             SizedBox(height: gap),
                             _buildKeypad(),
                           ],
@@ -451,35 +501,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   }
 
   Widget _buildKeypad() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SegmentedButton<_KeypadMode>(
-          segments: const [
-            ButtonSegment(
-              value: _KeypadMode.directional,
-              icon: Icon(Icons.gamepad_outlined),
-              label: Text('方向键'),
-            ),
-            ButtonSegment(
-              value: _KeypadMode.numeric,
-              icon: Icon(Icons.dialpad_outlined),
-              label: Text('九键'),
-            ),
-          ],
-          selected: {_keypadMode},
-          onSelectionChanged: (selection) {
-            setState(() => _keypadMode = selection.first);
-            _keyboardFocusNode.requestFocus();
-          },
-        ),
-        const SizedBox(height: 8),
-        if (_keypadMode == _KeypadMode.directional)
-          _buildDirectionalKeypad()
-        else
-          _buildNumericKeypad(),
-      ],
-    );
+    return switch (_keypadMode) {
+      _KeypadMode.directional => _buildDirectionalKeypad(),
+      _KeypadMode.numeric => _buildNumericKeypad(),
+      _KeypadMode.none => const SizedBox.shrink(),
+    };
   }
 
   Widget _buildDirectionalKeypad() {
@@ -527,23 +553,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
         for (final row in keys)
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (final key in row) _keyButton(key.$1, key.$2),
-            ],
+            children: [for (final key in row) _keyButton(key.$1, key.$2)],
           ),
       ],
     );
-  }
-
-  void _handleVirtualKeyDown(int keyCode) {
-    AndroidVibration.keyPress();
-    _engine?.sendKeyDown(keyCode);
-    _keyboardFocusNode.requestFocus();
-  }
-
-  void _handleVirtualKeyUp(int keyCode) {
-    _engine?.sendKeyUp(keyCode);
-    _keyboardFocusNode.requestFocus();
   }
 
   Widget _keyButton(String label, int keyCode) {
