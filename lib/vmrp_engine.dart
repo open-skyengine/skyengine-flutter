@@ -89,7 +89,12 @@ class VmrpEngine {
     }
   }
 
-  int start(String mrpPath, {String ext = 'start.mr', String? entry}) {
+  int start(
+    String mrpPath, {
+    String ext = 'start.mr',
+    String? entry,
+    String? workDir,
+  }) {
     if (_disposed) {
       lastError = 'Engine already disposed';
       return -1;
@@ -98,15 +103,29 @@ class VmrpEngine {
       lastError = 'Engine not initialized';
       return -1;
     }
+
+    final pWorkDir = workDir?.toNativeUtf8() ?? nullptr;
     final pPath = mrpPath.toNativeUtf8();
     final pExt = ext.toNativeUtf8();
     final pEntry = entry?.toNativeUtf8() ?? nullptr;
-
     try {
+      if (pWorkDir != nullptr) {
+        final setWorkDirRet = _bindings!.setWorkDir(pWorkDir.cast());
+        if (setWorkDirRet != 0) {
+          lastError = 'vmrp_api_set_work_dir returned $setWorkDirRet';
+          malloc.free(pPath);
+          malloc.free(pExt);
+          malloc.free(pWorkDir);
+          if (pEntry != nullptr) malloc.free(pEntry);
+          return -1;
+        }
+      }
+
       final ret = _bindings!.start(pPath.cast(), pExt.cast(), pEntry.cast());
 
       malloc.free(pPath);
       malloc.free(pExt);
+      if (pWorkDir != nullptr) malloc.free(pWorkDir);
       if (pEntry != nullptr) malloc.free(pEntry);
 
       if (ret == 0) {
@@ -124,6 +143,7 @@ class VmrpEngine {
     } catch (e) {
       malloc.free(pPath);
       malloc.free(pExt);
+      if (pWorkDir != nullptr) malloc.free(pWorkDir);
       if (pEntry != nullptr) malloc.free(pEntry);
       lastError = 'vmrp_api_start crashed: $e';
       return -1;

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'android_mythroad_assets.dart';
 import 'local_mrp_files.dart';
 
 class PickedMrpFile {
@@ -58,6 +59,12 @@ class _HomePageState extends State<HomePage> {
     final mrpDir = Directory('${dir.path}/mythroad');
     if (!await mrpDir.exists()) {
       await mrpDir.create(recursive: true);
+    }
+    try {
+      await AndroidMythroadAssets.ensureSystem(mrpDir);
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('Failed to prepare Mythroad system assets: $error');
     }
     if (!mounted) {
       return;
