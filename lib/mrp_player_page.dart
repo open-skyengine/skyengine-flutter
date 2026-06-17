@@ -136,6 +136,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   }
 
   String _workDirForMrp(String mrpPath) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      return File(Platform.resolvedExecutable).parent.path;
+    }
+
     final mrpParent = File(mrpPath).parent;
     if (mrpParent.path.split(Platform.pathSeparator).last.toLowerCase() ==
         'mythroad') {
