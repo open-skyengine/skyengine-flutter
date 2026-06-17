@@ -29,10 +29,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
-
         externalNativeBuild {
             cmake {
                 arguments += "-DVMRP_BUILD_SHARED_ONLY=ON"

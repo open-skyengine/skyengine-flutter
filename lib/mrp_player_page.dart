@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,11 +22,15 @@ class MrpPlayerPage extends StatefulWidget {
 }
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
+  static const MethodChannel _hapticsChannel = MethodChannel('mrpoid/haptics');
+  static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
+
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
+  DateTime? _lastVirtualKeyHapticAt;
 
   @override
   void initState() {
@@ -95,10 +100,12 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
       return VmrpKey.left;
     }
-    if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyD) {
+    if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD) {
       return VmrpKey.right;
     }
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
       return VmrpKey.select;
     }
     if (key == LogicalKeyboardKey.keyQ) {
@@ -184,6 +191,32 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     engine?.dispose();
   }
 
+  Future<void> _vibrateVirtualKey() async {
+    final now = DateTime.now();
+    final last = _lastVirtualKeyHapticAt;
+    if (last != null && now.difference(last) < _virtualKeyHapticDebounce) {
+      return;
+    }
+    if (!Platform.isAndroid) {
+      return;
+    }
+    _lastVirtualKeyHapticAt = now;
+
+    try {
+      await _hapticsChannel.invokeMethod<void>('virtualKeyVibrate');
+    } on PlatformException catch (error) {
+      debugPrint(
+        '[VMRP] virtual key vibration failed: '
+        '${error.code}, ${error.message}, ${error.details}',
+      );
+    } on MissingPluginException catch (error) {
+      debugPrint('[VMRP] virtual key vibration channel missing: $error');
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[VMRP] virtual key vibration failed: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -232,10 +265,13 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
                     const keypadHeight = 148.0;
                     const gap = 16.0;
                     final maxScreenWidth = constraints.maxWidth;
-                    final maxScreenHeight = constraints.maxHeight - keypadHeight - gap;
+                    final maxScreenHeight =
+                        constraints.maxHeight - keypadHeight - gap;
                     final scale = [
                       maxScreenWidth / _engine!.screenWidth,
-                      maxScreenHeight > 0 ? maxScreenHeight / _engine!.screenHeight : 0.1,
+                      maxScreenHeight > 0
+                          ? maxScreenHeight / _engine!.screenHeight
+                          : 0.1,
                       2.0,
                     ].reduce((a, b) => a < b ? a : b);
                     final screenWidth = _engine!.screenWidth * scale;
@@ -295,8 +331,12 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   Widget _keyButton(String label, int keyCode) {
     return GestureDetector(
-      onTapDown: (_) => _engine?.sendKeyDown(keyCode),
+      onTapDown: (_) {
+        unawaited(_vibrateVirtualKey());
+        _engine?.sendKeyDown(keyCode);
+      },
       onTapUp: (_) => _engine?.sendKeyUp(keyCode),
+      onTapCancel: () => _engine?.sendKeyUp(keyCode),
       child: Container(
         width: 80,
         margin: const EdgeInsets.all(4),
