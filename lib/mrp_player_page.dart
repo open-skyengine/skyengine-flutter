@@ -5,6 +5,30 @@ import 'package:flutter/services.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
+String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
+  final normalizedMrpPath = mrpPath.replaceAll('\\', '/');
+  var normalizedWorkDir = workDir.replaceAll('\\', '/');
+  while (normalizedWorkDir.endsWith('/')) {
+    normalizedWorkDir = normalizedWorkDir.substring(
+      0,
+      normalizedWorkDir.length - 1,
+    );
+  }
+
+  final mrpPathForCompare = Platform.isWindows
+      ? normalizedMrpPath.toLowerCase()
+      : normalizedMrpPath;
+  final workDirForCompare = Platform.isWindows
+      ? normalizedWorkDir.toLowerCase()
+      : normalizedWorkDir;
+  final workDirPrefix = '$workDirForCompare/';
+
+  if (mrpPathForCompare.startsWith(workDirPrefix)) {
+    return normalizedMrpPath.substring(normalizedWorkDir.length + 1);
+  }
+  return mrpPath;
+}
+
 enum _KeypadMode { directional, numeric, none }
 
 extension on _KeypadMode {
@@ -98,7 +122,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     debugPrint('[VMRP] mrpPath: ${widget.mrpPath}');
     debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
     final workDir = _workDirForMrp(widget.mrpPath);
+    final runtimeMrpPath = runtimeMrpPathForWorkDir(widget.mrpPath, workDir);
     debugPrint('[VMRP] workDir: $workDir');
+    debugPrint('[VMRP] runtimeMrpPath: $runtimeMrpPath');
 
     final engine = VmrpEngine(
       screenWidth: _currentResolution.width,
@@ -113,7 +139,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
 
-    final startRet = engine.start(widget.mrpPath, workDir: workDir);
+    final startRet = engine.start(runtimeMrpPath, workDir: workDir);
     debugPrint('[VMRP] start() returned $startRet');
     if (startRet != 0) {
       setState(() => _error = 'Engine start failed: ${engine.lastError}');
