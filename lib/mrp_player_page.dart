@@ -24,7 +24,12 @@ String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
   final workDirPrefix = '$workDirForCompare/';
 
   if (mrpPathForCompare.startsWith(workDirPrefix)) {
-    return normalizedMrpPath.substring(normalizedWorkDir.length + 1);
+    final relativePath = normalizedMrpPath.substring(
+      normalizedWorkDir.length + 1,
+    );
+    if (relativePath.toLowerCase().startsWith('mythroad/')) {
+      return relativePath;
+    }
   }
   return mrpPath;
 }

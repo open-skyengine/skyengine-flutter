@@ -29,7 +29,30 @@ void main() {
     expect(find.text('搜索应用'), findsOneWidget);
   });
 
-  test('desktop MRP directory is under mythroad', () async {
+  test('MRP directory uses mythroad without moving root files', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'mrpoid_home_page_test_',
+    );
+    await File(
+      '${tempDir.path}${Platform.pathSeparator}old.mrp',
+    ).writeAsString('OLD-MRP');
+
+    try {
+      final mrpDir = mrpDirectoryForWorkDir(tempDir);
+      await mrpDir.create(recursive: true);
+
+      final expectedMrpDir = '${tempDir.path}${Platform.pathSeparator}mythroad';
+      expect(mrpDir.path, expectedMrpDir);
+      expect(
+        await File('$expectedMrpDir${Platform.pathSeparator}old.mrp').exists(),
+        isFalse,
+      );
+    } finally {
+      await tempDir.delete(recursive: true);
+    }
+  });
+
+  test('MRP directory is under mythroad', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'mrpoid_home_page_test_',
     );
@@ -56,6 +79,14 @@ void main() {
         '${Directory.systemTemp.path}${Platform.pathSeparator}mrpoid_runtime';
     final mrpPath =
         '${Directory.systemTemp.path}${Platform.pathSeparator}external.mrp';
+
+    expect(runtimeMrpPathForWorkDir(mrpPath, workDir), mrpPath);
+  });
+
+  test('runtime MRP path preserves files directly under work dir', () {
+    final workDir =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}mrpoid_runtime';
+    final mrpPath = '$workDir${Platform.pathSeparator}demo.mrp';
 
     expect(runtimeMrpPathForWorkDir(mrpPath, workDir), mrpPath);
   });
