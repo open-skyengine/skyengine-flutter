@@ -23,9 +23,6 @@ typedef AppStoreBuilder =
 typedef MrpPlayerBuilder = Widget Function(String mrpPath);
 
 Directory mrpDirectoryForWorkDir(Directory workDir) {
-  if (Platform.isAndroid) {
-    return workDir;
-  }
   return Directory('${workDir.path}${Platform.pathSeparator}mythroad');
 }
 
@@ -68,9 +65,7 @@ class _HomePageState extends State<HomePage> {
       await mrpDir.create(recursive: true);
     }
     try {
-      await AndroidMythroadAssets.ensureSystem(
-        Directory('${dir.path}/mythroad'),
-      );
+      await AndroidMythroadAssets.ensureSystem(mrpDir);
     } catch (error, stackTrace) {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('Failed to prepare Mythroad system assets: $error');
