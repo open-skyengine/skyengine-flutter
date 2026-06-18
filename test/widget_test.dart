@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mrpoid/home_page.dart';
+import 'package:mrpoid/mrp_player_page.dart';
 
 void main() {
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
@@ -26,6 +27,37 @@ void main() {
     await tester.pump();
 
     expect(find.text('搜索应用'), findsOneWidget);
+  });
+
+  test('desktop MRP directory is under mythroad', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'mrpoid_home_page_test_',
+    );
+
+    try {
+      final expectedPath = '${tempDir.path}${Platform.pathSeparator}mythroad';
+      expect(mrpDirectoryForWorkDir(tempDir).path, expectedPath);
+    } finally {
+      await tempDir.delete(recursive: true);
+    }
+  });
+
+  test('runtime MRP path is relative when file is inside work dir', () {
+    final workDir =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}mrpoid_runtime';
+    final mrpPath =
+        '$workDir${Platform.pathSeparator}mythroad${Platform.pathSeparator}mpc.mrp';
+
+    expect(runtimeMrpPathForWorkDir(mrpPath, workDir), 'mythroad/mpc.mrp');
+  });
+
+  test('runtime MRP path preserves external files', () {
+    final workDir =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}mrpoid_runtime';
+    final mrpPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}external.mrp';
+
+    expect(runtimeMrpPathForWorkDir(mrpPath, workDir), mrpPath);
   });
 
   test('home page import smoke', () {

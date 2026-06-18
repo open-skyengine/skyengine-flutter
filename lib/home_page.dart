@@ -22,6 +22,13 @@ typedef AppStoreBuilder =
     );
 typedef MrpPlayerBuilder = Widget Function(String mrpPath);
 
+Directory mrpDirectoryForWorkDir(Directory workDir) {
+  if (Platform.isAndroid) {
+    return workDir;
+  }
+  return Directory('${workDir.path}${Platform.pathSeparator}mythroad');
+}
+
 class HomePage extends StatefulWidget {
   final DocumentsDirectoryProvider workingDirectoryProvider;
   final MrpFilePicker pickMrpFile;
@@ -78,10 +85,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Directory _mrpDirectoryForWorkDir(Directory workDir) {
-    if (Platform.isAndroid) {
-      return workDir;
-    }
-    return Directory('${workDir.path}${Platform.pathSeparator}download');
+    return mrpDirectoryForWorkDir(workDir);
   }
 
   Future<void> _refreshFileList() async {
