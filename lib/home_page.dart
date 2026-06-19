@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'android_app_update.dart';
 import 'android_mythroad_assets.dart';
+import 'app_store_api.dart';
 import 'local_mrp_files.dart';
 
 class PickedMrpFile {
@@ -20,7 +23,7 @@ typedef AppStoreBuilder =
       ValueChanged<String> onRunMrp,
       Future<void> Function() onDownloaded,
     );
-typedef MrpPlayerBuilder = Widget Function(String mrpPath);
+typedef MrpPlayerBuilder = Widget Function(String mrpPath, String? dnsMap);
 
 Directory mrpDirectoryForWorkDir(Directory workDir) {
   return Directory('${workDir.path}${Platform.pathSeparator}mythroad');
@@ -48,9 +51,18 @@ enum _MrpRemovalAction { removeFromList, deleteFile }
 
 class _HomePageState extends State<HomePage> {
   final LocalMrpFiles _localFiles = LocalMrpFiles();
+  final AppStoreClient _appStoreClient = AppStoreClient(
+    const AppStoreApiConfig(),
+  );
+  final AndroidAppUpdate _androidAppUpdate = const AndroidAppUpdate();
   List<FileSystemEntity> _mrpFiles = [];
   String? _mrpDir;
+  Directory? _workDir;
+  String? _dnsMap;
   int _selectedIndex = 0;
+  bool _checkingUpdate = false;
+  bool _downloadingUpdate = false;
+  bool _updatePromptShown = false;
 
   @override
   void initState() {
@@ -74,8 +86,11 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     setState(() {
+      _workDir = dir;
       _mrpDir = mrpDir.path;
     });
+    unawaited(_refreshRemoteConfig());
+    unawaited(_checkAppUpdate());
     await _refreshFileList();
   }
 
@@ -107,9 +122,141 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _runMrp(String path) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => widget.playerBuilder(path)));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => widget.playerBuilder(path, _dnsMap)),
+    );
+  }
+
+  Future<void> _refreshRemoteConfig() async {
+    try {
+      final config = await _appStoreClient.fetchConfig();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dnsMap = _dnsMapFromHosts(config.hosts);
+      });
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('Failed to refresh app config: $error');
+    }
+  }
+
+  Future<void> _checkAppUpdate() async {
+    if (!Platform.isAndroid || _checkingUpdate || _updatePromptShown) {
+      return;
+    }
+    _checkingUpdate = true;
+    try {
+      final versionCode = await _androidAppUpdate.getVersionCode();
+      final update = await _appStoreClient.checkEmulatorUpdate(
+        versionCode: versionCode,
+      );
+      final latest = update.latest;
+      if (!mounted || !update.updateAvailable || latest == null) {
+        return;
+      }
+      _updatePromptShown = true;
+      await _showAppUpdateDialog(latest);
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('Failed to check app update: $error');
+    } finally {
+      _checkingUpdate = false;
+    }
+  }
+
+  Future<void> _showAppUpdateDialog(AppStoreEmulatorVersion version) async {
+    final forceUpdate = version.forceUpdate;
+    final shouldDownload = await showDialog<bool>(
+      context: context,
+      barrierDismissible: !forceUpdate,
+      builder: (context) {
+        final title = version.version.isEmpty
+            ? '发现新版本'
+            : '发现新版本 ${version.version}';
+        return PopScope(
+          canPop: !forceUpdate,
+          child: AlertDialog(
+            title: Text(title),
+            content: SingleChildScrollView(
+              child: Text(
+                version.changelog.isEmpty ? '是否下载并安装更新？' : version.changelog,
+              ),
+            ),
+            actions: [
+              if (!forceUpdate)
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('稍后'),
+                ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('更新'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (shouldDownload == true) {
+      await _downloadAndInstallUpdate(version);
+    }
+  }
+
+  Future<void> _downloadAndInstallUpdate(
+    AppStoreEmulatorVersion version,
+  ) async {
+    final workDir = _workDir;
+    if (workDir == null || _downloadingUpdate) {
+      return;
+    }
+    setState(() => _downloadingUpdate = true);
+    try {
+      final updatesDir = Directory(
+        '${workDir.path}${Platform.pathSeparator}updates',
+      );
+      final downloaded = await _appStoreClient.downloadEmulatorVersion(
+        version: version,
+        destinationDir: updatesDir,
+      );
+      await _androidAppUpdate.installApk(downloaded.file.path);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已打开安装程序')));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新失败：$e')));
+      if (version.forceUpdate) {
+        unawaited(_showAppUpdateDialog(version));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _downloadingUpdate = false);
+      }
+    }
+  }
+
+  String? _dnsMapFromHosts(List<AppStoreHostMapping> hosts) {
+    final entries = hosts
+        .where((host) => host.domain.isNotEmpty && host.ip.isNotEmpty)
+        .map((host) => '${host.domain}->${host.ip}')
+        .toList();
+    return entries.isEmpty ? null : entries.join(';');
+  }
+
+  @override
+  void dispose() {
+    _appStoreClient.close();
+    super.dispose();
   }
 
   Future<void> _confirmRemoveMrp(FileSystemEntity entity) async {
@@ -198,7 +345,18 @@ class _HomePageState extends State<HomePage> {
         index: _selectedIndex,
         children: [
           _buildLocalList(),
-          widget.appStoreBuilder(_mrpDir, _runMrp, _refreshFileList),
+          Stack(
+            children: [
+              widget.appStoreBuilder(_mrpDir, _runMrp, _refreshFileList),
+              if (_downloadingUpdate)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: LinearProgressIndicator(),
+                ),
+            ],
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(

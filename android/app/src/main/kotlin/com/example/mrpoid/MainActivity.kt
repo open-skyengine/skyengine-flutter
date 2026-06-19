@@ -2,10 +2,15 @@ package com.example.mrpoid
 
 import android.content.res.AssetManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -64,6 +69,81 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_UPDATE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    METHOD_GET_VERSION_CODE -> {
+                        try {
+                            result.success(getCurrentVersionCode())
+                        } catch (error: Exception) {
+                            result.error(
+                                ERROR_APP_UPDATE_FAILED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
+                        }
+                    }
+                    METHOD_INSTALL_APK -> {
+                        val path = call.argument<String>(ARG_APK_PATH)
+                        if (path.isNullOrBlank()) {
+                            result.error(
+                                ERROR_BAD_ARGUMENTS,
+                                "Missing $ARG_APK_PATH",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            installApk(File(path))
+                            result.success(null)
+                        } catch (error: Exception) {
+                            result.error(
+                                ERROR_APP_UPDATE_FAILED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun getCurrentVersionCode(): Long {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return PackageInfoCompat.getLongVersionCode(info)
+    }
+
+    private fun installApk(apk: File) {
+        if (!apk.isFile) {
+            error("APK not found: ${apk.absolutePath}")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            error("Please allow this app to install unknown apps and retry")
+        }
+
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            apk,
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 
     private fun ensureMythroadSystem(mythroadDir: File): String {
@@ -188,6 +268,11 @@ class MainActivity : FlutterActivity() {
         const val HAPTICS_CHANNEL = "mrpoid/haptics"
         const val METHOD_VIRTUAL_KEY_VIBRATE = "virtualKeyVibrate"
         const val ERROR_VIBRATION_FAILED = "VIBRATION_FAILED"
+        const val APP_UPDATE_CHANNEL = "mrpoid/app_update"
+        const val METHOD_GET_VERSION_CODE = "getVersionCode"
+        const val METHOD_INSTALL_APK = "installApk"
+        const val ARG_APK_PATH = "path"
+        const val ERROR_APP_UPDATE_FAILED = "APP_UPDATE_FAILED"
         const val MYTHROAD_ASSETS_CHANNEL = "mrpoid/mythroad_assets"
         const val METHOD_ENSURE_SYSTEM = "ensureSystem"
         const val ARG_MYTHROAD_DIR = "mythroadDir"

@@ -49,6 +49,21 @@ void main() {
       expect(downloadedAgain.file.path, downloaded.file.path);
       expect(downloadedAgain.alreadyDownloaded, isTrue);
 
+      final config = await client.fetchConfig();
+      expect(config.hosts.single.domain, 'api.example.com');
+      expect(config.hosts.single.ip, '192.168.1.10');
+
+      final update = await client.checkEmulatorUpdate(versionCode: 1);
+      expect(update.updateAvailable, isTrue);
+      expect(update.latest!.versionCode, 42);
+
+      final apk = await client.downloadEmulatorVersion(
+        version: update.latest!,
+        destinationDir: tempDir,
+      );
+      expect(await apk.file.readAsString(), 'APK-DATA');
+      expect(apk.file.path.endsWith('mrpoid.apk'), isTrue);
+
       expect(
         requests.map((uri) => uri.path),
         containsAllInOrder([
@@ -58,6 +73,9 @@ void main() {
           '/api/app/v1/apps/399402/versions',
           '/api/app/v1/apps/399402/versions/1002/download',
           '/api/app/v1/apps/399402/versions',
+          '/api/app/v1/config',
+          '/api/app/v1/emulator/updates',
+          '/api/app/v1/emulator/versions/9/download',
         ]),
       );
       expect(
@@ -171,6 +189,42 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         'attachment; filename="demo2.mrp"',
       );
       request.response.add(utf8.encode('MRP-DATA'));
+      await request.response.close();
+    } else if (path == '/api/app/v1/config') {
+      expect(query, isEmpty);
+      _writeJson(request.response, {
+        'hosts': [
+          {'domain': 'api.example.com', 'ip': '192.168.1.10'},
+        ],
+      });
+    } else if (path == '/api/app/v1/emulator/updates') {
+      expect(query, {'platform': 'android', 'version_code': '1'});
+      _writeJson(request.response, {
+        'update_available': true,
+        'latest': {
+          'id': 9,
+          'platform': 'android',
+          'version_code': 42,
+          'version': '1.2.3',
+          'changelog': 'fix',
+          'download_url': '/api/app/v1/emulator/versions/9/download',
+          'file_size': 8,
+          'checksum': 'test-apk',
+          'force_update': false,
+          'published_at': '2026-06-14T08:00:00Z',
+        },
+      });
+    } else if (path == '/api/app/v1/emulator/versions/9/download') {
+      expect(query, isEmpty);
+      request.response.headers.contentType = ContentType(
+        'application',
+        'vnd.android.package-archive',
+      );
+      request.response.headers.set(
+        'content-disposition',
+        'attachment; filename="mrpoid.apk"',
+      );
+      request.response.add(utf8.encode('APK-DATA'));
       await request.response.close();
     } else {
       request.response.statusCode = HttpStatus.notFound;

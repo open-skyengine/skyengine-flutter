@@ -142,7 +142,6 @@ function sign({ method, path, query = '', timestamp, nonce, body = '', secret })
 | `page` | int | 否 | 页码，默认 `1` |
 | `page_size` | int | 否 | 每页数量，默认 `20`，最大 `100` |
 | `resolution` | string | 否 | 屏幕分辨率，例如 `240x320` |
-| `model_code` | string | 否 | 机型编码 |
 
 ## 4. 接口列表
 
@@ -161,7 +160,6 @@ GET /api/app/v1/apps
 | `page` | int | 否 | 页码 |
 | `page_size` | int | 否 | 每页数量 |
 | `resolution` | string | 否 | 只返回支持该分辨率的应用 |
-| `model_code` | string | 否 | 只返回支持该机型编码的应用 |
 
 响应示例：
 
@@ -206,7 +204,6 @@ GET /api/app/v1/apps/search
 | `page` | int | 否 | 页码 |
 | `page_size` | int | 否 | 每页数量 |
 | `resolution` | string | 否 | 只搜索支持该分辨率的应用 |
-| `model_code` | string | 否 | 只搜索支持该机型编码的应用 |
 
 响应格式同应用列表。
 
@@ -234,7 +231,6 @@ GET /api/app/v1/apps/{app_id}/versions
 | `page` | int | 否 | 页码 |
 | `page_size` | int | 否 | 每页数量 |
 | `resolution` | string | 否 | 只返回包含该分辨率包的版本 |
-| `model_code` | string | 否 | 只返回包含该机型编码包的版本 |
 
 响应示例：
 
@@ -259,7 +255,7 @@ GET /api/app/v1/apps/{app_id}/versions
           },
           "file_size": 123456,
           "checksum": "sha256-or-md5",
-          "download_url": "/api/app/v1/apps/399484/versions/1002/download?model_code=vmrp&resolution=240x320"
+          "download_url": "/api/app/v1/apps/399484/versions/1002/download?resolution=240x320"
         }
       ],
       "created_at": "2026-06-14T08:00:00Z",
@@ -287,7 +283,6 @@ GET /api/app/v1/apps/{app_id}/versions/{version_code}/download
 | `app_id` | uint32 | 是 | 路径参数，MRP 应用外部 ID |
 | `version_code` | uint32 | 是 | 路径参数，版本号 |
 | `resolution` | string | 否 | 指定分辨率包 |
-| `model_code` | string | 否 | 指定机型编码包 |
 
 响应：
 
@@ -314,6 +309,113 @@ GET /api/app/v1/apps/{app_id}/versions/{version_code}/download
 }
 ```
 
+### 4.5 检测安卓模拟器更新
+
+```http
+GET /api/app/v1/emulator/updates
+```
+
+查询当前已发布的最新安卓模拟器版本，并判断客户端是否需要更新。当前仅支持 `android` 平台。
+
+请求参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `platform` | string | 否 | 平台，默认 `android` |
+| `version_code` | uint32 | 否 | 当前客户端版本号 |
+| `current_version_code` | uint32 | 否 | 当前客户端版本号，作用同 `version_code` |
+
+响应示例：
+
+```json
+{
+  "update_available": true,
+  "latest": {
+    "id": 9,
+    "platform": "android",
+    "version_code": 42,
+    "version": "1.2.3",
+    "changelog": "更新说明",
+    "download_url": "/api/app/v1/emulator/versions/9/download",
+    "file_size": 12345678,
+    "checksum": "sha256",
+    "force_update": false,
+    "published_at": "2026-06-14T08:00:00Z"
+  }
+}
+```
+
+没有已发布版本，或当前版本号大于等于最新版本号时：
+
+```json
+{
+  "update_available": false
+}
+```
+
+### 4.6 下载安卓模拟器新版本
+
+```http
+GET /api/app/v1/emulator/versions/{id}/download
+```
+
+下载指定已发布模拟器版本。`id` 为模拟器版本数据库主键，即检测更新接口 `latest.id`。
+
+请求参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | uint | 是 | 路径参数，模拟器版本 ID |
+
+响应：
+
+| 项目 | 说明 |
+|------|------|
+| HTTP 状态 | `200 OK` |
+| Content-Type | `application/vnd.android.package-archive` |
+| Content-Disposition | `attachment; filename="xxx.apk"` |
+| Body | APK 文件二进制内容 |
+
+响应头：
+
+| Header | 说明 |
+|--------|------|
+| `X-Emulator-Version-Code` | 模拟器版本号 |
+| `X-Emulator-Version` | 模拟器版本号字符串 |
+
+指定版本不存在或未发布时返回 `404`。
+
+### 4.7 获取 APP 配置
+
+```http
+GET /api/app/v1/config
+```
+
+返回 APP 端配置。当前包含 `hosts` 字段，后续新增配置也会追加到该接口响应中。
+
+`hosts` 为后台启用状态的自定义域名解析配置，供模拟器按域名覆盖解析到指定 IP。
+
+响应示例：
+
+```json
+{
+  "hosts": [
+    {
+      "domain": "api.example.com",
+      "ip": "192.168.1.10"
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+|------|------|
+| `hosts` | 域名映射数组 |
+| `hosts[].domain` | 域名 |
+| `hosts[].ip` | IP |
+
 ## 5. 状态码
 
 | 状态码 | 场景 |
@@ -321,7 +423,7 @@ GET /api/app/v1/apps/{app_id}/versions/{version_code}/download
 | `200` | 请求成功 |
 | `400` | 参数错误，例如 `q` 为空或路径参数非法 |
 | `401` | 签名缺失、签名错误、时间戳过期、Key 错误 |
-| `404` | 指定应用、版本或下载包不存在 |
+| `404` | 指定应用、版本、下载包或模拟器版本不存在 |
 | `503` | 数据库不可用 |
 
 ## 6. 配置项

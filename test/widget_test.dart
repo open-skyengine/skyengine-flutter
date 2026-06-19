@@ -104,6 +104,6 @@ Widget _buildTestAppStore(
   return const Center(child: Text('搜索应用'));
 }
 
-Widget _buildTestPlayer(String mrpPath) {
+Widget _buildTestPlayer(String mrpPath, String? dnsMap) {
   return Scaffold(body: Text(mrpPath));
 }

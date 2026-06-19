@@ -46,12 +46,14 @@ extension on _KeypadMode {
 
 class MrpPlayerPage extends StatefulWidget {
   final String mrpPath;
+  final String? dnsMap;
   final int screenWidth;
   final int screenHeight;
 
   const MrpPlayerPage({
     super.key,
     required this.mrpPath,
+    this.dnsMap,
     this.screenWidth = 240,
     this.screenHeight = 320,
   });
@@ -144,7 +146,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
 
-    final startRet = engine.start(runtimeMrpPath, workDir: workDir);
+    final startRet = engine.start(
+      runtimeMrpPath,
+      workDir: workDir,
+      dnsMap: widget.dnsMap,
+    );
     debugPrint('[VMRP] start() returned $startRet');
     if (startRet != 0) {
       setState(() => _error = 'Engine start failed: ${engine.lastError}');
