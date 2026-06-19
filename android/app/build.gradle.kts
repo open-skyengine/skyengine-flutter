@@ -75,3 +75,7 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+}

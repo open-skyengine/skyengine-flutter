@@ -186,12 +186,115 @@ class AppStoreVersion {
   }
 }
 
+class AppStoreEmulatorVersion {
+  final int id;
+  final String platform;
+  final int versionCode;
+  final String version;
+  final String changelog;
+  final String? downloadUrl;
+  final int fileSize;
+  final String checksum;
+  final bool forceUpdate;
+
+  const AppStoreEmulatorVersion({
+    required this.id,
+    required this.platform,
+    required this.versionCode,
+    required this.version,
+    required this.changelog,
+    required this.downloadUrl,
+    required this.fileSize,
+    required this.checksum,
+    required this.forceUpdate,
+  });
+
+  factory AppStoreEmulatorVersion.fromJson(Map<String, dynamic> json) {
+    return AppStoreEmulatorVersion(
+      id: _readInt(json['id']),
+      platform: _readString(json['platform']),
+      versionCode: _readInt(json['version_code']),
+      version: _readString(json['version']),
+      changelog: _readString(json['changelog']),
+      downloadUrl: _nullableString(json['download_url']),
+      fileSize: _readInt(json['file_size']),
+      checksum: _readString(json['checksum']),
+      forceUpdate: _readBool(json['force_update']),
+    );
+  }
+}
+
+class AppStoreEmulatorUpdate {
+  final bool updateAvailable;
+  final AppStoreEmulatorVersion? latest;
+
+  const AppStoreEmulatorUpdate({
+    required this.updateAvailable,
+    required this.latest,
+  });
+
+  factory AppStoreEmulatorUpdate.fromJson(Map<String, dynamic> json) {
+    final latestJson = json['latest'];
+    return AppStoreEmulatorUpdate(
+      updateAvailable: _readBool(json['update_available']),
+      latest: latestJson is Map<String, dynamic>
+          ? AppStoreEmulatorVersion.fromJson(latestJson)
+          : null,
+    );
+  }
+}
+
+class AppStoreHostMapping {
+  final String domain;
+  final String ip;
+
+  const AppStoreHostMapping({required this.domain, required this.ip});
+
+  factory AppStoreHostMapping.fromJson(Map<String, dynamic> json) {
+    return AppStoreHostMapping(
+      domain: _readString(json['domain']),
+      ip: _readString(json['ip']),
+    );
+  }
+}
+
+class AppStoreConfig {
+  final List<AppStoreHostMapping> hosts;
+
+  const AppStoreConfig({required this.hosts});
+
+  factory AppStoreConfig.fromJson(Map<String, dynamic> json) {
+    final hostsJson = json['hosts'];
+    return AppStoreConfig(
+      hosts: hostsJson is List
+          ? hostsJson
+                .whereType<Map<String, dynamic>>()
+                .map(AppStoreHostMapping.fromJson)
+                .where((host) => host.domain.isNotEmpty && host.ip.isNotEmpty)
+                .toList()
+          : const [],
+    );
+  }
+}
+
 class DownloadedMrp {
   final File file;
   final AppStoreVersion version;
   final bool alreadyDownloaded;
 
   const DownloadedMrp({
+    required this.file,
+    required this.version,
+    this.alreadyDownloaded = false,
+  });
+}
+
+class DownloadedEmulatorApk {
+  final File file;
+  final AppStoreEmulatorVersion version;
+  final bool alreadyDownloaded;
+
+  const DownloadedEmulatorApk({
     required this.file,
     required this.version,
     this.alreadyDownloaded = false,
@@ -361,6 +464,85 @@ class AppStoreClient {
     return DownloadedMrp(file: file, version: version);
   }
 
+  Future<AppStoreEmulatorUpdate> checkEmulatorUpdate({
+    int? versionCode,
+    String platform = 'android',
+  }) async {
+    final json = await _getJson(
+      '/emulator/updates',
+      _queryParams({
+        'platform': platform,
+        if (versionCode != null) 'version_code': '$versionCode',
+      }),
+    );
+    return AppStoreEmulatorUpdate.fromJson(json);
+  }
+
+  Future<DownloadedEmulatorApk> downloadEmulatorVersion({
+    required AppStoreEmulatorVersion version,
+    required Directory destinationDir,
+  }) async {
+    if (!await destinationDir.exists()) {
+      await destinationDir.create(recursive: true);
+    }
+
+    final file = File(
+      '${destinationDir.path}${Platform.pathSeparator}'
+      '${_emulatorApkFileName(version)}',
+    );
+    if (await _isCompleteDownloadedEmulatorApk(file, version)) {
+      return DownloadedEmulatorApk(
+        file: file,
+        version: version,
+        alreadyDownloaded: true,
+      );
+    }
+
+    final uri = version.downloadUrl == null
+        ? _buildUri('/emulator/versions/${version.id}/download', const {})
+        : _resolveApiUri(version.downloadUrl!);
+    final response = await _getResponse(uri);
+    if (response.statusCode != HttpStatus.ok) {
+      final message = await _readError(response);
+      throw AppStoreApiException(message, statusCode: response.statusCode);
+    }
+
+    final headerName = _filenameFromDisposition(
+      response.headers.value('content-disposition'),
+    );
+    final target = headerName == null
+        ? file
+        : File(
+            '${destinationDir.path}${Platform.pathSeparator}'
+            '${_sanitizeApkFileName(headerName)}',
+          );
+    final tempFile = File('${target.path}.download');
+
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+
+    try {
+      await response.pipe(tempFile.openWrite());
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tempFile.rename(target.path);
+    } catch (_) {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      rethrow;
+    }
+
+    return DownloadedEmulatorApk(file: target, version: version);
+  }
+
+  Future<AppStoreConfig> fetchConfig() async {
+    final json = await _getJson('/config', const {});
+    return AppStoreConfig.fromJson(json);
+  }
+
   Uri resolveAssetUri(String pathOrUrl) => _resolveApiUri(pathOrUrl);
 
   Future<File?> _findDownloadedFile({
@@ -503,6 +685,23 @@ class AppStoreClient {
     }
     final expectedSize = package?.fileSize ?? 0;
     return expectedSize <= 0 || length == expectedSize;
+  }
+
+  Future<bool> _isCompleteDownloadedEmulatorApk(
+    File file,
+    AppStoreEmulatorVersion version,
+  ) async {
+    if (!await file.exists()) {
+      return false;
+    }
+    if (!file.path.toLowerCase().endsWith('.apk')) {
+      return false;
+    }
+    final length = await file.length();
+    if (length <= 0) {
+      return false;
+    }
+    return version.fileSize <= 0 || length == version.fileSize;
   }
 
   Iterable<String> _downloadedFileNameCandidates({
@@ -755,6 +954,30 @@ String _sanitizeMrpFileName(String value) {
   return name;
 }
 
+String _sanitizeApkFileName(String value) {
+  var name = value
+      .split('/')
+      .last
+      .split(r'\')
+      .last
+      .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+      .trim();
+  if (name.isEmpty) {
+    name = 'mrpoid-update.apk';
+  }
+  if (!name.toLowerCase().endsWith('.apk')) {
+    name = '$name.apk';
+  }
+  return name;
+}
+
+String _emulatorApkFileName(AppStoreEmulatorVersion version) {
+  final versionPart = version.version.isEmpty
+      ? version.versionCode
+      : version.version;
+  return _sanitizeApkFileName('mrpoid-$versionPart.apk');
+}
+
 int _readInt(dynamic value, {int fallback = 0}) {
   if (value is int) {
     return value;
@@ -775,4 +998,18 @@ String? _nullableString(dynamic value) {
     return null;
   }
   return value.toString();
+}
+
+bool _readBool(dynamic value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  if (value is String) {
+    final normalized = value.toLowerCase().trim();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
+  }
+  return false;
 }

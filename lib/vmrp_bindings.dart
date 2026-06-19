@@ -13,6 +13,9 @@ typedef VmrpApiStartC =
 typedef VmrpApiStartDart =
     int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 
+typedef VmrpApiSetDnsMapC = Int32 Function(Pointer<Utf8>);
+typedef VmrpApiSetDnsMapDart = int Function(Pointer<Utf8>);
+
 typedef VmrpApiDestroyC = Void Function();
 typedef VmrpApiDestroyDart = void Function();
 
@@ -70,6 +73,7 @@ class VmrpBindings {
   late final VmrpApiInitDart init;
   late final VmrpApiSetWorkDirDart setWorkDir;
   late final VmrpApiStartDart start;
+  late final VmrpApiSetDnsMapDart setDnsMap;
   late final VmrpApiDestroyDart destroy;
   late final VmrpApiIsRunningDart isRunning;
   late final VmrpApiEventDart event;
@@ -105,6 +109,9 @@ class VmrpBindings {
     );
     start = _lib.lookupFunction<VmrpApiStartC, VmrpApiStartDart>(
       'vmrp_api_start',
+    );
+    setDnsMap = _lib.lookupFunction<VmrpApiSetDnsMapC, VmrpApiSetDnsMapDart>(
+      'vmrp_api_set_dns_map',
     );
     destroy = _lib.lookupFunction<VmrpApiDestroyC, VmrpApiDestroyDart>(
       'vmrp_api_destroy',

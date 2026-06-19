@@ -94,6 +94,7 @@ class VmrpEngine {
     String ext = 'start.mr',
     String? entry,
     String? workDir,
+    String? dnsMap,
   }) {
     if (_disposed) {
       lastError = 'Engine already disposed';
@@ -108,6 +109,7 @@ class VmrpEngine {
     final pPath = mrpPath.toNativeUtf8();
     final pExt = ext.toNativeUtf8();
     final pEntry = entry?.toNativeUtf8() ?? nullptr;
+    final pDnsMap = (dnsMap ?? '').toNativeUtf8();
     try {
       if (pWorkDir != nullptr) {
         final setWorkDirRet = _bindings!.setWorkDir(pWorkDir.cast());
@@ -117,8 +119,20 @@ class VmrpEngine {
           malloc.free(pExt);
           malloc.free(pWorkDir);
           if (pEntry != nullptr) malloc.free(pEntry);
+          malloc.free(pDnsMap);
           return -1;
         }
+      }
+
+      final setDnsMapRet = _bindings!.setDnsMap(pDnsMap.cast());
+      if (setDnsMapRet != 0) {
+        lastError = 'vmrp_api_set_dns_map returned $setDnsMapRet';
+        malloc.free(pPath);
+        malloc.free(pExt);
+        if (pWorkDir != nullptr) malloc.free(pWorkDir);
+        if (pEntry != nullptr) malloc.free(pEntry);
+        malloc.free(pDnsMap);
+        return -1;
       }
 
       final ret = _bindings!.start(pPath.cast(), pExt.cast(), pEntry.cast());
@@ -127,6 +141,7 @@ class VmrpEngine {
       malloc.free(pExt);
       if (pWorkDir != nullptr) malloc.free(pWorkDir);
       if (pEntry != nullptr) malloc.free(pEntry);
+      malloc.free(pDnsMap);
 
       if (ret == 0) {
         _running = true;
@@ -145,6 +160,7 @@ class VmrpEngine {
       malloc.free(pExt);
       if (pWorkDir != nullptr) malloc.free(pWorkDir);
       if (pEntry != nullptr) malloc.free(pEntry);
+      malloc.free(pDnsMap);
       lastError = 'vmrp_api_start crashed: $e';
       return -1;
     }
