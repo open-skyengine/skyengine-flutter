@@ -198,7 +198,13 @@ class _AppStorePageState extends State<AppStorePage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已下载 ${downloaded.file.uri.pathSegments.last}')),
+        SnackBar(
+          content: Text(
+            downloaded.alreadyDownloaded
+                ? '已下载，直接打开 ${downloaded.file.uri.pathSegments.last}'
+                : '已下载 ${downloaded.file.uri.pathSegments.last}',
+          ),
+        ),
       );
       widget.onRunMrp(downloaded.file.path);
     } catch (e) {

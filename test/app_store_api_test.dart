@@ -24,10 +24,7 @@ void main() {
       expect(list.items.single.name, 'Demo App 1');
       expect(list.hasMore, isTrue);
 
-      final filteredList = await client.fetchApps(
-        page: 3,
-        pageSize: 1,
-      );
+      final filteredList = await client.fetchApps(page: 3, pageSize: 1);
       expect(filteredList.items.single.name, 'Demo App 3');
 
       final search = await client.searchApps(
@@ -45,6 +42,13 @@ void main() {
       expect(await downloaded.file.readAsString(), 'MRP-DATA');
       expect(downloaded.file.path.endsWith('demo2.mrp'), isTrue);
 
+      final downloadedAgain = await client.downloadLatestVersion(
+        app: search.items.single,
+        destinationDir: tempDir,
+      );
+      expect(downloadedAgain.file.path, downloaded.file.path);
+      expect(downloadedAgain.alreadyDownloaded, isTrue);
+
       expect(
         requests.map((uri) => uri.path),
         containsAllInOrder([
@@ -53,7 +57,17 @@ void main() {
           '/api/app/v1/apps/search',
           '/api/app/v1/apps/399402/versions',
           '/api/app/v1/apps/399402/versions/1002/download',
+          '/api/app/v1/apps/399402/versions',
         ]),
+      );
+      expect(
+        requests
+            .where(
+              (uri) =>
+                  uri.path == '/api/app/v1/apps/399402/versions/1002/download',
+            )
+            .length,
+        1,
       );
     } finally {
       client.close();
@@ -78,11 +92,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
     final path = request.uri.path;
     final query = request.uri.queryParameters;
     if (path == '/api/app/v1/apps' && query['page'] == '1') {
-      expect(query, {
-        'page': '1',
-        'page_size': '1',
-        'resolution': '240x320',
-      });
+      expect(query, {'page': '1', 'page_size': '1', 'resolution': '240x320'});
       _writeJson(
         request.response,
         _appPage(
@@ -94,11 +104,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         ),
       );
     } else if (path == '/api/app/v1/apps' && query['page'] == '3') {
-      expect(query, {
-        'page': '3',
-        'page_size': '1',
-        'resolution': '240x320',
-      });
+      expect(query, {'page': '3', 'page_size': '1', 'resolution': '240x320'});
       _writeJson(
         request.response,
         _appPage(
@@ -127,11 +133,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         ),
       );
     } else if (path == '/api/app/v1/apps/399402/versions') {
-      expect(query, {
-        'page': '1',
-        'page_size': '1',
-        'resolution': '240x320',
-      });
+      expect(query, {'page': '1', 'page_size': '1', 'resolution': '240x320'});
       _writeJson(request.response, {
         'items': [
           {
@@ -162,9 +164,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         'page_size': 1,
       });
     } else if (path == '/api/app/v1/apps/399402/versions/1002/download') {
-      expect(query, {
-        'resolution': '240x320',
-      });
+      expect(query, {'resolution': '240x320'});
       request.response.headers.contentType = ContentType.binary;
       request.response.headers.set(
         'content-disposition',
