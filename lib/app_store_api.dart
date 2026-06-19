@@ -189,8 +189,13 @@ class AppStoreVersion {
 class DownloadedMrp {
   final File file;
   final AppStoreVersion version;
+  final bool alreadyDownloaded;
 
-  const DownloadedMrp({required this.file, required this.version});
+  const DownloadedMrp({
+    required this.file,
+    required this.version,
+    this.alreadyDownloaded = false,
+  });
 }
 
 class AppStoreApiException implements Exception {
@@ -276,12 +281,30 @@ class AppStoreClient {
 
     final version = versions.items.first;
     final package = version.packages.isNotEmpty ? version.packages.first : null;
+
+    if (!await destinationDir.exists()) {
+      await destinationDir.create(recursive: true);
+    }
+
+    final downloadedFile = await _findDownloadedFile(
+      app: app,
+      version: version,
+      package: package,
+      destinationDir: destinationDir,
+      resolution: resolution,
+    );
+    if (downloadedFile != null) {
+      return DownloadedMrp(
+        file: downloadedFile,
+        version: version,
+        alreadyDownloaded: true,
+      );
+    }
+
     final uri = package?.downloadUrl == null
         ? _buildUri(
             '/apps/${app.appId}/versions/${version.versionCode}/download',
-            _queryParams({
-              'resolution': resolution,
-            }),
+            _queryParams({'resolution': resolution}),
           )
         : _resolveApiUri(package!.downloadUrl!);
 
@@ -305,9 +328,6 @@ class AppStoreClient {
     );
     final tempFile = File('${file.path}.download');
 
-    if (!await destinationDir.exists()) {
-      await destinationDir.create(recursive: true);
-    }
     if (await tempFile.exists()) {
       await tempFile.delete();
     }
@@ -325,10 +345,202 @@ class AppStoreClient {
       rethrow;
     }
 
+    try {
+      await _recordDownloadedFile(
+        app: app,
+        version: version,
+        package: package,
+        destinationDir: destinationDir,
+        resolution: resolution,
+        file: file,
+      );
+    } catch (_) {
+      // The file is valid even if local cache metadata cannot be updated.
+    }
+
     return DownloadedMrp(file: file, version: version);
   }
 
   Uri resolveAssetUri(String pathOrUrl) => _resolveApiUri(pathOrUrl);
+
+  Future<File?> _findDownloadedFile({
+    required AppStoreApp app,
+    required AppStoreVersion version,
+    required AppStorePackage? package,
+    required Directory destinationDir,
+    required String resolution,
+  }) async {
+    final indexedFileName = await _readDownloadedFileName(
+      app: app,
+      version: version,
+      destinationDir: destinationDir,
+      resolution: resolution,
+    );
+    if (indexedFileName != null) {
+      final file = File(
+        '${destinationDir.path}${Platform.pathSeparator}$indexedFileName',
+      );
+      if (await _isCompleteDownloadedFile(file, package)) {
+        return file;
+      }
+    }
+
+    for (final fileName in _downloadedFileNameCandidates(
+      app: app,
+      version: version,
+      package: package,
+    )) {
+      final file = File(
+        '${destinationDir.path}${Platform.pathSeparator}$fileName',
+      );
+      if (await _isCompleteDownloadedFile(file, package)) {
+        return file;
+      }
+    }
+    return _findLegacyDownloadedFile(
+      app: app,
+      package: package,
+      destinationDir: destinationDir,
+    );
+  }
+
+  Future<File?> _findLegacyDownloadedFile({
+    required AppStoreApp app,
+    required AppStorePackage? package,
+    required Directory destinationDir,
+  }) async {
+    final prefixes = _legacyDownloadedFilePrefixes(app);
+    if (prefixes.isEmpty) {
+      return null;
+    }
+    await for (final entity in destinationDir.list(followLinks: false)) {
+      if (entity is! File ||
+          !await _isCompleteDownloadedFile(entity, package)) {
+        continue;
+      }
+      final name = entity.uri.pathSegments.last.toLowerCase();
+      if (prefixes.any(name.startsWith)) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _readDownloadedFileName({
+    required AppStoreApp app,
+    required AppStoreVersion version,
+    required Directory destinationDir,
+    required String resolution,
+  }) async {
+    final index = await _readDownloadIndex(destinationDir);
+    final entry = index[_downloadIndexKey(app, version, resolution)];
+    if (entry is Map<String, dynamic>) {
+      return _nullableString(entry['file_name']);
+    }
+    return null;
+  }
+
+  Future<void> _recordDownloadedFile({
+    required AppStoreApp app,
+    required AppStoreVersion version,
+    required AppStorePackage? package,
+    required Directory destinationDir,
+    required String resolution,
+    required File file,
+  }) async {
+    final index = await _readDownloadIndex(destinationDir);
+    index[_downloadIndexKey(app, version, resolution)] = {
+      'file_name': _fileNameFromPath(file.path),
+      if (package != null) 'file_size': package.fileSize,
+      if (package != null && package.checksum.isNotEmpty)
+        'checksum': package.checksum,
+    };
+    await _writeDownloadIndex(destinationDir, index);
+  }
+
+  Future<Map<String, dynamic>> _readDownloadIndex(
+    Directory destinationDir,
+  ) async {
+    final file = _downloadIndexFile(destinationDir);
+    if (!await file.exists()) {
+      return {};
+    }
+    try {
+      final data = jsonDecode(await file.readAsString());
+      if (data is Map<String, dynamic>) {
+        final downloads = data['downloads'];
+        if (downloads is Map<String, dynamic>) {
+          return downloads;
+        }
+      }
+    } catch (_) {
+      // Ignore invalid local cache metadata and fall back to file probing.
+    }
+    return {};
+  }
+
+  Future<void> _writeDownloadIndex(
+    Directory destinationDir,
+    Map<String, dynamic> downloads,
+  ) async {
+    final file = _downloadIndexFile(destinationDir);
+    await file.writeAsString(jsonEncode({'downloads': downloads}));
+  }
+
+  Future<bool> _isCompleteDownloadedFile(
+    File file,
+    AppStorePackage? package,
+  ) async {
+    if (!await file.exists()) {
+      return false;
+    }
+    if (!file.path.toLowerCase().endsWith('.mrp')) {
+      return false;
+    }
+    final length = await file.length();
+    if (length <= 0) {
+      return false;
+    }
+    final expectedSize = package?.fileSize ?? 0;
+    return expectedSize <= 0 || length == expectedSize;
+  }
+
+  Iterable<String> _downloadedFileNameCandidates({
+    required AppStoreApp app,
+    required AppStoreVersion version,
+    required AppStorePackage? package,
+  }) sync* {
+    final fallbackBase = app.internalName.isEmpty
+        ? '${app.appId}'
+        : app.internalName;
+    yield _sanitizeMrpFileName('${fallbackBase}_${version.versionCode}.mrp');
+
+    final packageName = _filenameFromDownloadPath(package?.downloadUrl);
+    if (packageName != null) {
+      yield _sanitizeMrpFileName(packageName);
+    }
+  }
+
+  File _downloadIndexFile(Directory destinationDir) {
+    return File(
+      '${destinationDir.path}${Platform.pathSeparator}.app_store_downloads.json',
+    );
+  }
+
+  String _downloadIndexKey(
+    AppStoreApp app,
+    AppStoreVersion version,
+    String resolution,
+  ) {
+    return '${app.appId}:${version.versionCode}:$resolution';
+  }
+
+  List<String> _legacyDownloadedFilePrefixes(AppStoreApp app) {
+    return {
+      '${app.appId}'.toLowerCase(),
+      if (app.internalName.isNotEmpty) app.internalName.toLowerCase(),
+    }.toList();
+  }
 
   Future<PagedResult<AppStoreApp>> _fetchAppPage(
     String path,
@@ -513,6 +725,18 @@ String? _filenameFromDisposition(String? disposition) {
   ).firstMatch(disposition);
   return plainMatch?.group(1)?.trim();
 }
+
+String? _filenameFromDownloadPath(String? pathOrUrl) {
+  if (pathOrUrl == null || pathOrUrl.isEmpty) {
+    return null;
+  }
+  final path = Uri.parse(pathOrUrl).path;
+  final name = path.split('/').last.trim();
+  return name.toLowerCase().endsWith('.mrp') ? name : null;
+}
+
+String _fileNameFromPath(String path) =>
+    path.split(Platform.pathSeparator).last;
 
 String _sanitizeMrpFileName(String value) {
   var name = value
