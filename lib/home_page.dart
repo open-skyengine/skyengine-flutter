@@ -34,6 +34,8 @@ class HomePage extends StatefulWidget {
   final MrpFilePicker pickMrpFile;
   final AppStoreBuilder appStoreBuilder;
   final MrpPlayerBuilder playerBuilder;
+  final bool enableStartupRemoteConfig;
+  final bool enableStartupUpdateCheck;
 
   const HomePage({
     super.key,
@@ -41,6 +43,8 @@ class HomePage extends StatefulWidget {
     required this.pickMrpFile,
     required this.appStoreBuilder,
     required this.playerBuilder,
+    this.enableStartupRemoteConfig = true,
+    this.enableStartupUpdateCheck = true,
   });
 
   @override
@@ -49,13 +53,15 @@ class HomePage extends StatefulWidget {
 
 enum _MrpRemovalAction { removeFromList, deleteFile }
 
+enum _LocalMrpMenuAction { details }
+
 class _HomePageState extends State<HomePage> {
   final LocalMrpFiles _localFiles = LocalMrpFiles();
   final AppStoreClient _appStoreClient = AppStoreClient(
     const AppStoreApiConfig(),
   );
   final AndroidAppUpdate _androidAppUpdate = const AndroidAppUpdate();
-  List<FileSystemEntity> _mrpFiles = [];
+  List<LocalMrpFile> _mrpFiles = [];
   String? _mrpDir;
   Directory? _workDir;
   String? _dnsMap;
@@ -89,8 +95,12 @@ class _HomePageState extends State<HomePage> {
       _workDir = dir;
       _mrpDir = mrpDir.path;
     });
-    unawaited(_refreshRemoteConfig());
-    unawaited(_checkAppUpdate());
+    if (widget.enableStartupRemoteConfig) {
+      unawaited(_refreshRemoteConfig());
+    }
+    if (widget.enableStartupUpdateCheck) {
+      unawaited(_checkAppUpdate());
+    }
     await _refreshFileList();
   }
 
@@ -259,8 +269,8 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<void> _confirmRemoveMrp(FileSystemEntity entity) async {
-    final name = _fileName(entity.path);
+  Future<void> _confirmRemoveMrp(LocalMrpFile file) async {
+    final name = file.displayName;
     final action = await showDialog<_MrpRemovalAction>(
       context: context,
       builder: (context) {
@@ -292,12 +302,12 @@ class _HomePageState extends State<HomePage> {
 
     switch (action) {
       case _MrpRemovalAction.removeFromList:
-        _removeMrpFromList(entity.path);
+        _removeMrpFromList(file.path);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('已从列表移除：$name')));
       case _MrpRemovalAction.deleteFile:
-        await _deleteMrpFile(entity.path);
+        await _deleteMrpFile(file.path);
     }
   }
 
@@ -306,7 +316,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _localFiles.hide(path);
       _mrpFiles = _mrpFiles
-          .where((entity) => _localFiles.fileListKey(entity.path) != key)
+          .where((file) => _localFiles.fileListKey(file.path) != key)
           .toList();
     });
   }
@@ -337,10 +347,99 @@ class _HomePageState extends State<HomePage> {
 
   String _fileName(String path) => _localFiles.fileName(path);
 
+  Future<void> _showLocalMrpMenu(
+    LocalMrpFile file,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final action = await showMenu<_LocalMrpMenuAction>(
+      context: context,
+      position: RelativeRect.fromRect(
+        globalPosition & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: const [
+        PopupMenuItem(
+          value: _LocalMrpMenuAction.details,
+          child: ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text('查看详情'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    );
+
+    if (!mounted || action == null) {
+      return;
+    }
+
+    switch (action) {
+      case _LocalMrpMenuAction.details:
+        await _showMrpDetails(file);
+    }
+  }
+
+  Future<void> _showMrpDetails(LocalMrpFile file) async {
+    final metadata = file.metadata;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(file.displayName),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow('文件名', file.fileName),
+                _detailRow('路径', file.path),
+                _detailRow('厂商', _emptyAsDash(metadata.vendor)),
+                _detailRow('版本号', metadata.version?.toString() ?? '-'),
+                _detailRow('包内文件名', _emptyAsDash(metadata.fileHeaderName)),
+                _detailRow('应用 ID', metadata.appId?.toString() ?? '-'),
+                _detailRow(
+                  '分辨率',
+                  metadata.screenWidth == null || metadata.screenHeight == null
+                      ? '-'
+                      : '${metadata.screenWidth} x ${metadata.screenHeight}',
+                ),
+                _detailRow('描述', _emptyAsDash(metadata.description)),
+                _detailRow('MRP 头', metadata.validHeader ? '有效' : '未识别'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 2),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
+  String _emptyAsDash(String value) => value.isEmpty ? '-' : value;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('skyengine')),
+      appBar: AppBar(title: const Text('SkyEngine')),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
@@ -391,17 +490,33 @@ class _HomePageState extends State<HomePage> {
       itemCount: _mrpFiles.length,
       itemBuilder: (context, index) {
         final file = _mrpFiles[index];
-        final name = _fileName(file.path);
-        return ListTile(
-          leading: const Icon(Icons.videogame_asset),
-          title: Text(name),
-          subtitle: Text(file.path),
-          trailing: IconButton(
-            tooltip: '删除',
-            onPressed: () => _confirmRemoveMrp(file),
-            icon: const Icon(Icons.delete_outline),
+        Offset? longPressPosition;
+        return GestureDetector(
+          onLongPressStart: (details) {
+            longPressPosition = details.globalPosition;
+          },
+          onLongPress: () {
+            _showLocalMrpMenu(file, longPressPosition ?? Offset.zero);
+          },
+          child: ListTile(
+            leading: const Icon(Icons.videogame_asset),
+            title: Text(
+              file.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              file.vendorAndVersion,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              tooltip: '删除',
+              onPressed: () => _confirmRemoveMrp(file),
+              icon: const Icon(Icons.delete_outline),
+            ),
+            onTap: () => _runMrp(file.path),
           ),
-          onTap: () => _runMrp(file.path),
         );
       },
     );
