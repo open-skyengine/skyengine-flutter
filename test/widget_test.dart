@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skyengine/home_page.dart';
@@ -7,26 +6,37 @@ import 'package:skyengine/mrp_player_page.dart';
 
 void main() {
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomePage(
-          workingDirectoryProvider: () async => Directory.systemTemp,
-          pickMrpFile: () async => null,
-          appStoreBuilder: _buildTestAppStore,
-          playerBuilder: _buildTestPlayer,
-        ),
-      ),
+    final tempDir = await Directory.systemTemp.createTemp(
+      'skyengine_home_page_test_',
     );
-    await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('skyengine'), findsOneWidget);
-    expect(find.text('本地'), findsOneWidget);
-    expect(find.text('商店'), findsOneWidget);
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(
+            workingDirectoryProvider: () async => tempDir,
+            pickMrpFile: () async => null,
+            appStoreBuilder: _buildTestAppStore,
+            playerBuilder: _buildTestPlayer,
+            enableStartupRemoteConfig: false,
+            enableStartupUpdateCheck: false,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('商店'));
-    await tester.pump();
+      expect(find.text('skyengine'), findsOneWidget);
+      expect(find.text('本地'), findsOneWidget);
+      expect(find.text('商店'), findsOneWidget);
 
-    expect(find.text('搜索应用'), findsOneWidget);
+      await tester.tap(find.text('商店'));
+      await tester.pump();
+
+      expect(find.text('搜索应用'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tempDir.delete(recursive: true);
+    }
   });
 
   test('MRP directory uses mythroad without moving root files', () async {
