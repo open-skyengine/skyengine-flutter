@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MrpOid',
+      title: 'skyengine',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
@@ -51,7 +51,7 @@ Future<Directory> _getWorkingDirectory() async {
     }
     return await getApplicationDocumentsDirectory();
   } catch (_) {
-    return Directory.systemTemp.createTemp('mrpoid_docs_');
+    return Directory.systemTemp.createTemp('skyengine_docs_');
   }
 }
 

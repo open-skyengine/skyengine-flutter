@@ -340,7 +340,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('MrpOid')),
+      appBar: AppBar(title: const Text('skyengine')),
       body: IndexedStack(
         index: _selectedIndex,
         children: [

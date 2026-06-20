@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mrpoid/local_mrp_files.dart';
+import 'package:skyengine/local_mrp_files.dart';
 
 void main() {
   test(
     'hide removes an MRP from local scans without deleting the file',
     () async {
       final tempDir = await Directory.systemTemp.createTemp(
-        'mrpoid_local_files_test_',
+        'skyengine_local_files_test_',
       );
       final mrpFile = await _writeMrpFile(tempDir, 'demo.mrp');
 
@@ -29,7 +29,7 @@ void main() {
 
   test('deleteFile removes the backing MRP and clears hidden state', () async {
     final tempDir = await Directory.systemTemp.createTemp(
-      'mrpoid_local_files_test_',
+      'skyengine_local_files_test_',
     );
     final mrpFile = await _writeMrpFile(tempDir, 'demo.mrp');
 
@@ -47,7 +47,7 @@ void main() {
 
   test('scan returns only visible MRP files sorted by name', () async {
     final tempDir = await Directory.systemTemp.createTemp(
-      'mrpoid_local_files_test_',
+      'skyengine_local_files_test_',
     );
 
     try {

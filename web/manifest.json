@@ -1,6 +1,6 @@
 {
-    "name": "mrpoid",
-    "short_name": "mrpoid",
+    "name": "skyengine",
+    "short_name": "skyengine",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -84,7 +84,7 @@ class _ScreenResolution {
 enum _PlayerMenuAction { switchKeyboard, switchResolution }
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
-  static const MethodChannel _hapticsChannel = MethodChannel('mrpoid/haptics');
+  static const MethodChannel _hapticsChannel = MethodChannel('skyengine/haptics');
   static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
   static const List<_ScreenResolution> _commonResolutions = [
     _ScreenResolution(240, 320),

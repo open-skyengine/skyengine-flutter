@@ -17,7 +17,7 @@ val packageMythroadSystem by tasks.registering(Zip::class) {
 }
 
 android {
-    namespace = "com.example.mrpoid"
+    namespace = "cn.jysafe.skyengine"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -32,7 +32,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.mrpoid"
+        applicationId = "cn.jysafe.skyengine"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

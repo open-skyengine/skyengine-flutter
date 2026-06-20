@@ -3,14 +3,14 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mrpoid/app_store_api.dart';
+import 'package:skyengine/app_store_api.dart';
 
 void main() {
   test('AppStoreClient signs, searches, paginates, and downloads', () async {
     final requests = <Uri>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = _serveAppApi(server, requests);
-    final tempDir = await Directory.systemTemp.createTemp('mrpoid_api_test_');
+    final tempDir = await Directory.systemTemp.createTemp('skyengine_api_test_');
     final client = AppStoreClient(
       AppStoreApiConfig(
         baseUrl: 'http://${server.address.host}:${server.port}/api/app/v1',
@@ -62,7 +62,7 @@ void main() {
         destinationDir: tempDir,
       );
       expect(await apk.file.readAsString(), 'APK-DATA');
-      expect(apk.file.path.endsWith('mrpoid.apk'), isTrue);
+      expect(apk.file.path.endsWith('skyengine.apk'), isTrue);
 
       expect(
         requests.map((uri) => uri.path),
@@ -222,7 +222,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
       );
       request.response.headers.set(
         'content-disposition',
-        'attachment; filename="mrpoid.apk"',
+        'attachment; filename="skyengine.apk"',
       );
       request.response.add(utf8.encode('APK-DATA'));
       await request.response.close();
