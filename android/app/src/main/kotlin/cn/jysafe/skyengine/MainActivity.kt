@@ -1,4 +1,4 @@
-package com.example.mrpoid
+package cn.jysafe.skyengine
 
 import android.content.res.AssetManager
 import android.content.Context
@@ -265,15 +265,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private companion object {
-        const val HAPTICS_CHANNEL = "mrpoid/haptics"
+        const val HAPTICS_CHANNEL = "skyengine/haptics"
         const val METHOD_VIRTUAL_KEY_VIBRATE = "virtualKeyVibrate"
         const val ERROR_VIBRATION_FAILED = "VIBRATION_FAILED"
-        const val APP_UPDATE_CHANNEL = "mrpoid/app_update"
+        const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
         const val ARG_APK_PATH = "path"
         const val ERROR_APP_UPDATE_FAILED = "APP_UPDATE_FAILED"
-        const val MYTHROAD_ASSETS_CHANNEL = "mrpoid/mythroad_assets"
+        const val MYTHROAD_ASSETS_CHANNEL = "skyengine/mythroad_assets"
         const val METHOD_ENSURE_SYSTEM = "ensureSystem"
         const val ARG_MYTHROAD_DIR = "mythroadDir"
         const val MYTHROAD_SYSTEM_ASSET = "mythroad_system.zip"

@@ -963,7 +963,7 @@ String _sanitizeApkFileName(String value) {
       .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
       .trim();
   if (name.isEmpty) {
-    name = 'mrpoid-update.apk';
+    name = 'skyengine-update.apk';
   }
   if (!name.toLowerCase().endsWith('.apk')) {
     name = '$name.apk';
@@ -975,7 +975,7 @@ String _emulatorApkFileName(AppStoreEmulatorVersion version) {
   final versionPart = version.version.isEmpty
       ? version.versionCode
       : version.version;
-  return _sanitizeApkFileName('mrpoid-$versionPart.apk');
+  return _sanitizeApkFileName('skyengine-$versionPart.apk');
 }
 
 int _readInt(dynamic value, {int fallback = 0}) {

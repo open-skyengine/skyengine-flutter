@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class AndroidMythroadAssets {
-  static const MethodChannel _channel = MethodChannel('mrpoid/mythroad_assets');
+  static const MethodChannel _channel = MethodChannel('skyengine/mythroad_assets');
 
   static Future<void> ensureSystem(Directory mythroadDir) async {
     if (!Platform.isAndroid) {

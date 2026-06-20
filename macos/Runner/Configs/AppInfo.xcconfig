@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = mrpoid
+PRODUCT_NAME = skyengine
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.mrpoid
+PRODUCT_BUNDLE_IDENTIFIER = cn.jysafe.skyengine
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 cn.jysafe. All rights reserved.

@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class AndroidVibration {
-  static const MethodChannel _channel = MethodChannel('mrpoid/vibration');
+  static const MethodChannel _channel = MethodChannel('skyengine/vibration');
 
   static Future<void> keyPress() async {
     if (!Platform.isAndroid) {

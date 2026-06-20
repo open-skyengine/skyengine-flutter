@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class AndroidAppUpdate {
-  static const MethodChannel _channel = MethodChannel('mrpoid/app_update');
+  static const MethodChannel _channel = MethodChannel('skyengine/app_update');
 
   const AndroidAppUpdate();
 
