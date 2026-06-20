@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.bundling.Zip
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -7,6 +8,18 @@ plugins {
 }
 
 val mythroadSystemAssetsDir = layout.buildDirectory.dir("generated/assets/mythroadSystem")
+val keystoreProperties =
+    Properties().apply {
+        val propertiesFile = rootProject.file("key.properties")
+        if (propertiesFile.isFile) {
+            propertiesFile.inputStream().use(::load)
+        }
+    }
+
+fun signingProperty(name: String): String? =
+    (keystoreProperties.getProperty(name) ?: providers.environmentVariable(name).orNull)
+        ?.takeIf { it.isNotBlank() }
+
 val packageMythroadSystem by tasks.registering(Zip::class) {
     archiveFileName.set("mythroad_system.zip")
     destinationDirectory.set(mythroadSystemAssetsDir)
@@ -49,11 +62,21 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = signingProperty("storeFile")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+            }
+            storePassword = signingProperty("storePassword")
+            keyAlias = signingProperty("keyAlias")
+            keyPassword = signingProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
