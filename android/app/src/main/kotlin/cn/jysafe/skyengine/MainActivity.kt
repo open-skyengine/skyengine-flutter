@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -20,8 +22,20 @@ import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
 
 class MainActivity : FlutterActivity() {
+    private var mrpOpenChannel: MethodChannel? = null
+    private var initialMrpPath: String? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        initialMrpPath = initialMrpPath ?: importMrpFromIntent(intent)
+        mrpOpenChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MRP_OPEN_CHANNEL)
+        mrpOpenChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                METHOD_GET_INITIAL_MRP -> result.success(initialMrpPath)
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, HAPTICS_CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -109,6 +123,103 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        val mrpPath = importMrpFromIntent(intent) ?: return
+        mrpOpenChannel?.invokeMethod(METHOD_OPEN_MRP, mrpPath)
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        mrpOpenChannel?.setMethodCallHandler(null)
+        mrpOpenChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    private fun importMrpFromIntent(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_VIEW) {
+            return null
+        }
+
+        val uri = intent.data ?: return null
+        return try {
+            importMrpUri(uri)
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to import MRP from $uri", error)
+            null
+        }
+    }
+
+    private fun importMrpUri(uri: Uri): String? {
+        val displayName = displayNameForUri(uri) ?: return null
+        if (!displayName.endsWith(MRP_EXTENSION, ignoreCase = true)) {
+            Log.w(TAG, "Ignoring non-MRP file: $displayName")
+            return null
+        }
+
+        val targetDir = File(getExternalFilesDir(null) ?: filesDir, MYTHROAD_DIR_NAME)
+        if (!targetDir.exists() && !targetDir.mkdirs()) {
+            error("Unable to create ${targetDir.absolutePath}")
+        }
+
+        val target = uniqueFile(targetDir, sanitizeFileName(displayName))
+        when (uri.scheme) {
+            "file" -> File(uri.path ?: return null).inputStream()
+            "content" -> contentResolver.openInputStream(uri)
+            else -> null
+        }?.use { input ->
+            FileOutputStream(target).use { output ->
+                input.copyTo(output)
+            }
+        } ?: return null
+
+        return target.absolutePath
+    }
+
+    private fun displayNameForUri(uri: Uri): String? {
+        if (uri.scheme == "content") {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (index >= 0) {
+                            val name = cursor.getString(index)
+                            if (!name.isNullOrBlank()) {
+                                return name
+                            }
+                        }
+                    }
+                }
+        }
+
+        return uri.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun sanitizeFileName(fileName: String): String {
+        val sanitized = fileName
+            .replace('\\', '_')
+            .replace('/', '_')
+            .replace(Regex("[\\x00-\\x1F]"), "_")
+            .trim()
+        return sanitized.takeIf { it.isNotEmpty() } ?: DEFAULT_MRP_FILE_NAME
+    }
+
+    private fun uniqueFile(dir: File, fileName: String): File {
+        val dotIndex = fileName.lastIndexOf('.')
+        val baseName = if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
+        val extension = if (dotIndex >= 0) fileName.substring(dotIndex) else MRP_EXTENSION
+        var candidate = File(dir, fileName)
+        var index = 1
+        while (candidate.exists()) {
+            candidate = File(dir, "$baseName-$index$extension")
+            index += 1
+        }
+        return candidate
     }
 
     private fun getCurrentVersionCode(): Long {
@@ -273,15 +384,22 @@ class MainActivity : FlutterActivity() {
         const val METHOD_INSTALL_APK = "installApk"
         const val ARG_APK_PATH = "path"
         const val ERROR_APP_UPDATE_FAILED = "APP_UPDATE_FAILED"
+        const val MRP_OPEN_CHANNEL = "skyengine/mrp_open"
+        const val METHOD_GET_INITIAL_MRP = "getInitialMrp"
+        const val METHOD_OPEN_MRP = "openMrp"
         const val MYTHROAD_ASSETS_CHANNEL = "skyengine/mythroad_assets"
         const val METHOD_ENSURE_SYSTEM = "ensureSystem"
         const val ARG_MYTHROAD_DIR = "mythroadDir"
         const val MYTHROAD_SYSTEM_ASSET = "mythroad_system.zip"
         const val MYTHROAD_SYSTEM_DIR_NAME = "system"
+        const val MYTHROAD_DIR_NAME = "mythroad"
+        const val MRP_EXTENSION = ".mrp"
+        const val DEFAULT_MRP_FILE_NAME = "imported.mrp"
         const val ERROR_BAD_ARGUMENTS = "BAD_ARGUMENTS"
         const val ERROR_MYTHROAD_SYSTEM_FAILED = "MYTHROAD_SYSTEM_FAILED"
         const val VIRTUAL_KEY_VIBRATION_MS = 18L
         const val VIRTUAL_KEY_SILENCE_MS = 1000L
         const val NO_REPEAT = -1
+        const val TAG = "SkyEngine"
     }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'android_app_update.dart';
 import 'android_mythroad_assets.dart';
+import 'android_mrp_open.dart';
 import 'app_store_api.dart';
 import 'local_mrp_files.dart';
 
@@ -17,6 +18,8 @@ class PickedMrpFile {
 
 typedef DocumentsDirectoryProvider = Future<Directory> Function();
 typedef MrpFilePicker = Future<PickedMrpFile?> Function();
+typedef InitialMrpProvider = Future<String?> Function();
+typedef OpenMrpStreamProvider = Stream<String> Function();
 typedef AppStoreBuilder =
     Widget Function(
       String? mrpDir,
@@ -34,6 +37,8 @@ class HomePage extends StatefulWidget {
   final MrpFilePicker pickMrpFile;
   final AppStoreBuilder appStoreBuilder;
   final MrpPlayerBuilder playerBuilder;
+  final InitialMrpProvider initialMrpProvider;
+  final OpenMrpStreamProvider openMrpStreamProvider;
   final bool enableStartupRemoteConfig;
   final bool enableStartupUpdateCheck;
 
@@ -43,12 +48,22 @@ class HomePage extends StatefulWidget {
     required this.pickMrpFile,
     required this.appStoreBuilder,
     required this.playerBuilder,
+    this.initialMrpProvider = _defaultInitialMrpProvider,
+    this.openMrpStreamProvider = _defaultOpenMrpStreamProvider,
     this.enableStartupRemoteConfig = true,
     this.enableStartupUpdateCheck = true,
   });
 
   @override
   State<HomePage> createState() => _HomePageState();
+}
+
+Future<String?> _defaultInitialMrpProvider() {
+  return const AndroidMrpOpen().getInitialMrp();
+}
+
+Stream<String> _defaultOpenMrpStreamProvider() {
+  return const AndroidMrpOpen().openMrps();
 }
 
 enum _MrpRemovalAction { removeFromList, deleteFile }
@@ -69,11 +84,16 @@ class _HomePageState extends State<HomePage> {
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
   bool _updatePromptShown = false;
+  bool _openedInitialMrp = false;
+  StreamSubscription<String>? _mrpOpenSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadMrpFiles();
+    _mrpOpenSubscription = widget.openMrpStreamProvider().listen(
+      _openImportedMrp,
+    );
   }
 
   Future<void> _loadMrpFiles() async {
@@ -102,6 +122,7 @@ class _HomePageState extends State<HomePage> {
       unawaited(_checkAppUpdate());
     }
     await _refreshFileList();
+    await _openInitialMrp();
   }
 
   Directory _mrpDirectoryForWorkDir(Directory workDir) {
@@ -117,6 +138,25 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _mrpFiles = files;
     });
+  }
+
+  Future<void> _openInitialMrp() async {
+    if (_openedInitialMrp) {
+      return;
+    }
+    _openedInitialMrp = true;
+    final path = await widget.initialMrpProvider();
+    if (path != null && path.isNotEmpty) {
+      await _openImportedMrp(path);
+    }
+  }
+
+  Future<void> _openImportedMrp(String path) async {
+    await _refreshFileList();
+    if (!mounted) {
+      return;
+    }
+    _runMrp(path);
   }
 
   Future<void> _pickAndCopyMrp() async {
@@ -265,6 +305,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _mrpOpenSubscription?.cancel();
     _appStoreClient.close();
     super.dispose();
   }
