@@ -18,6 +18,8 @@ void main() {
             pickMrpFile: () async => null,
             appStoreBuilder: _buildTestAppStore,
             playerBuilder: _buildTestPlayer,
+            initialMrpProvider: () async => null,
+            openMrpStreamProvider: () => const Stream.empty(),
             enableStartupRemoteConfig: false,
             enableStartupUpdateCheck: false,
           ),
@@ -25,7 +27,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('skyengine'), findsOneWidget);
+      expect(find.text('SkyEngine'), findsOneWidget);
       expect(find.text('本地'), findsOneWidget);
       expect(find.text('商店'), findsOneWidget);
 
