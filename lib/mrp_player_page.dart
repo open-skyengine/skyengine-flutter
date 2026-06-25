@@ -84,8 +84,15 @@ class _ScreenResolution {
 enum _PlayerMenuAction { switchKeyboard, switchResolution }
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
-  static const MethodChannel _hapticsChannel = MethodChannel('skyengine/haptics');
+  static const MethodChannel _hapticsChannel = MethodChannel(
+    'skyengine/haptics',
+  );
   static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
+  static const double _keypadGap = 18;
+  static const double _keypadColumnGap = 18;
+  static const double _keypadRowGap = 10;
+  static const double _keypadButtonWidth = 84;
+  static const double _keypadButtonHeight = 44;
   static const List<_ScreenResolution> _commonResolutions = [
     _ScreenResolution(240, 320),
     _ScreenResolution(176, 220),
@@ -100,6 +107,14 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   bool _disposedEngine = false;
   late _ScreenResolution _currentResolution;
   DateTime? _lastVirtualKeyHapticAt;
+
+  double get _keypadReservedHeight {
+    return switch (_keypadMode) {
+      _KeypadMode.directional => _keypadButtonHeight * 3 + _keypadRowGap * 2,
+      _KeypadMode.numeric => _keypadButtonHeight * 4 + _keypadRowGap * 3,
+      _KeypadMode.none => 0,
+    };
+  }
 
   @override
   void initState() {
@@ -215,6 +230,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     }
     if (key == LogicalKeyboardKey.keyE) {
       return VmrpKey.softRight;
+    }
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
+      return VmrpKey.key0;
+    }
+    if (key == LogicalKeyboardKey.asterisk ||
+        key == LogicalKeyboardKey.numpadMultiply) {
+      return VmrpKey.star;
+    }
+    if (key == LogicalKeyboardKey.numberSign) {
+      return VmrpKey.pound;
     }
     return null;
   }
@@ -503,8 +528,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
               : LayoutBuilder(
                   builder: (context, constraints) {
                     final hasVirtualKeypad = _keypadMode != _KeypadMode.none;
-                    final keypadHeight = hasVirtualKeypad ? 148.0 : 0.0;
-                    final gap = hasVirtualKeypad ? 16.0 : 0.0;
+                    final keypadHeight = _keypadReservedHeight;
+                    final gap = hasVirtualKeypad ? _keypadGap : 0.0;
                     final maxScreenWidth = constraints.maxWidth;
                     final maxScreenHeight =
                         constraints.maxHeight - keypadHeight - gap;
@@ -518,9 +543,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
                     final screenWidth = _engine!.screenWidth * scale;
                     final screenHeight = _engine!.screenHeight * scale;
 
-                    return Center(
+                    return Align(
+                      alignment: Alignment.topCenter,
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           VmrpWidget(
                             engine: _engine!,
@@ -553,30 +579,23 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _keyButton('左软键', VmrpKey.softLeft),
-            _keyButton('上', VmrpKey.up),
-            _keyButton('右软键', VmrpKey.softRight),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _keyButton('左', VmrpKey.left),
-            _keyButton('确定', VmrpKey.select),
-            _keyButton('右', VmrpKey.right),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(width: 80),
-            _keyButton('下', VmrpKey.down),
-            const SizedBox(width: 80),
-          ],
-        ),
+        _keypadRow([
+          _keyButton('左软键', VmrpKey.softLeft),
+          _keyButton('上', VmrpKey.up),
+          _keyButton('右软键', VmrpKey.softRight),
+        ]),
+        const SizedBox(height: _keypadRowGap),
+        _keypadRow([
+          _keyButton('左', VmrpKey.left),
+          _keyButton('确定', VmrpKey.select),
+          _keyButton('右', VmrpKey.right),
+        ]),
+        const SizedBox(height: _keypadRowGap),
+        _keypadRow([
+          const SizedBox(width: _keypadButtonWidth),
+          _keyButton('下', VmrpKey.down),
+          const SizedBox(width: _keypadButtonWidth),
+        ]),
       ],
     );
   }
@@ -586,16 +605,28 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       [('1', VmrpKey.key1), ('2', VmrpKey.key2), ('3', VmrpKey.key3)],
       [('4', VmrpKey.key4), ('5', VmrpKey.key5), ('6', VmrpKey.key6)],
       [('7', VmrpKey.key7), ('8', VmrpKey.key8), ('9', VmrpKey.key9)],
+      [('*', VmrpKey.star), ('0', VmrpKey.key0), ('#', VmrpKey.pound)],
     ];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final row in keys)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [for (final key in row) _keyButton(key.$1, key.$2)],
-          ),
+        for (final row in keys) ...[
+          _keypadRow([for (final key in row) _keyButton(key.$1, key.$2)]),
+          if (row != keys.last) const SizedBox(height: _keypadRowGap),
+        ],
+      ],
+    );
+  }
+
+  Widget _keypadRow(List<Widget> children) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(width: _keypadColumnGap),
+          children[i],
+        ],
       ],
     );
   }
@@ -609,9 +640,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       onTapUp: (_) => _engine?.sendKeyUp(keyCode),
       onTapCancel: () => _engine?.sendKeyUp(keyCode),
       child: Container(
-        width: 80,
-        height: 38,
-        margin: const EdgeInsets.all(4),
+        width: _keypadButtonWidth,
+        height: _keypadButtonHeight,
         decoration: BoxDecoration(
           color: Colors.grey[800],
           borderRadius: BorderRadius.circular(4),
