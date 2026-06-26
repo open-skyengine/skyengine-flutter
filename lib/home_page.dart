@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'android_app_update.dart';
 import 'android_mythroad_assets.dart';
@@ -263,15 +264,83 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     setState(() => _downloadingUpdate = true);
+    Future<void> pendingProgressNotification = Future<void>.value();
+    var canShowDownloadNotification = false;
     try {
+      canShowDownloadNotification = await _androidAppUpdate
+          .ensureDownloadNotificationPermission();
+      if (!canShowDownloadNotification && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('通知权限未开启，下载进度不会显示在通知栏')));
+      }
+
       final updatesDir = Directory(
         '${workDir.path}${Platform.pathSeparator}updates',
       );
+      var lastNotifiedPercent = -1;
+      var lastNotifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
+      Future<void> notifyProgress(int downloadedBytes, int totalBytes) async {
+        if (!canShowDownloadNotification) {
+          return;
+        }
+        final now = DateTime.now();
+        final percent = totalBytes > 0
+            ? (downloadedBytes * 100 ~/ totalBytes).clamp(0, 100)
+            : -1;
+        if (percent == lastNotifiedPercent &&
+            now.difference(lastNotifiedAt) < const Duration(seconds: 1)) {
+          return;
+        }
+        lastNotifiedPercent = percent;
+        lastNotifiedAt = now;
+        await _androidAppUpdate.showDownloadProgress(
+          downloadedBytes: downloadedBytes,
+          totalBytes: totalBytes,
+        );
+      }
+
+      void queueProgressNotification(int downloadedBytes, int totalBytes) {
+        if (!canShowDownloadNotification) {
+          return;
+        }
+        pendingProgressNotification = pendingProgressNotification
+            .then((_) => notifyProgress(downloadedBytes, totalBytes))
+            .catchError((Object error, StackTrace stackTrace) {
+              debugPrintStack(stackTrace: stackTrace);
+              debugPrint('Failed to update download notification: $error');
+            });
+        unawaited(pendingProgressNotification);
+      }
+
+      queueProgressNotification(0, version.fileSize);
       final downloaded = await _appStoreClient.downloadEmulatorVersion(
         version: version,
         destinationDir: updatesDir,
+        onProgress: queueProgressNotification,
       );
-      await _androidAppUpdate.installApk(downloaded.file.path);
+      await pendingProgressNotification;
+      if (downloaded.alreadyDownloaded) {
+        if (canShowDownloadNotification) {
+          await _androidAppUpdate.cancelDownloadNotification();
+        }
+      } else if (canShowDownloadNotification) {
+        await _androidAppUpdate.showDownloadComplete(downloaded.file.path);
+      }
+      try {
+        await _androidAppUpdate.installApk(downloaded.file.path);
+      } on PlatformException catch (error) {
+        if (error.code == 'INSTALL_PERMISSION_REQUIRED') {
+          if (!mounted) {
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? '允许后会自动继续安装')),
+          );
+          return;
+        }
+        rethrow;
+      }
       if (!mounted) {
         return;
       }
@@ -279,6 +348,10 @@ class _HomePageState extends State<HomePage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('已打开安装程序')));
     } catch (e) {
+      await pendingProgressNotification;
+      if (canShowDownloadNotification) {
+        await _androidAppUpdate.showDownloadFailed(e.toString());
+      }
       if (!mounted) {
         return;
       }

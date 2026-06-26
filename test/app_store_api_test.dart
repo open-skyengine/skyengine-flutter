@@ -10,7 +10,9 @@ void main() {
     final requests = <Uri>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = _serveAppApi(server, requests);
-    final tempDir = await Directory.systemTemp.createTemp('skyengine_api_test_');
+    final tempDir = await Directory.systemTemp.createTemp(
+      'skyengine_api_test_',
+    );
     final client = AppStoreClient(
       AppStoreApiConfig(
         baseUrl: 'http://${server.address.host}:${server.port}/api/app/v1',
@@ -64,6 +66,13 @@ void main() {
       expect(await apk.file.readAsString(), 'APK-DATA');
       expect(apk.file.path.endsWith('skyengine.apk'), isTrue);
 
+      final apkAgain = await client.downloadEmulatorVersion(
+        version: update.latest!,
+        destinationDir: tempDir,
+      );
+      expect(apkAgain.file.path, apk.file.path);
+      expect(apkAgain.alreadyDownloaded, isTrue);
+
       expect(
         requests.map((uri) => uri.path),
         containsAllInOrder([
@@ -83,6 +92,14 @@ void main() {
             .where(
               (uri) =>
                   uri.path == '/api/app/v1/apps/399402/versions/1002/download',
+            )
+            .length,
+        1,
+      );
+      expect(
+        requests
+            .where(
+              (uri) => uri.path == '/api/app/v1/emulator/versions/9/download',
             )
             .length,
         1,
