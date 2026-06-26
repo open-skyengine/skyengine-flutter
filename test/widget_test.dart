@@ -86,6 +86,15 @@ void main() {
     expect(runtimeMrpPathForWorkDir(mrpPath, workDir), 'mythroad/mpc.mrp');
   });
 
+  test('runtime MRP path preserves Chinese file name when made relative', () {
+    final workDir =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}skyengine_runtime';
+    final mrpPath =
+        '$workDir${Platform.pathSeparator}mythroad${Platform.pathSeparator}中文游戏.mrp';
+
+    expect(runtimeMrpPathForWorkDir(mrpPath, workDir), 'mythroad/中文游戏.mrp');
+  });
+
   test('runtime MRP path preserves external files', () {
     final workDir =
         '${Directory.systemTemp.path}${Platform.pathSeparator}skyengine_runtime';
