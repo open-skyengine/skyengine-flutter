@@ -26,13 +26,17 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   ui.Image? _screenImage;
   int? _activePointer;
   Offset? _lastTouchPoint;
+  Offset? _pendingMovePoint;
+  bool _moveFlushScheduled = false;
+  bool _screenUpdateInProgress = false;
+  bool _screenUpdatePending = false;
 
   VmrpEngine get engine => widget.engine;
 
   @override
   void initState() {
     super.initState();
-    _sub = engine.onScreenUpdate.listen((_) => _updateScreen());
+    _sub = engine.onScreenUpdate.listen((_) => _queueScreenUpdate());
   }
 
   @override
@@ -40,6 +44,30 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     _sub?.cancel();
     _screenImage?.dispose();
     super.dispose();
+  }
+
+  void _queueScreenUpdate() {
+    if (!mounted) return;
+    if (_screenUpdateInProgress) {
+      _screenUpdatePending = true;
+      return;
+    }
+    _screenUpdateInProgress = true;
+    unawaited(_processScreenUpdates());
+  }
+
+  Future<void> _processScreenUpdates() async {
+    try {
+      do {
+        _screenUpdatePending = false;
+        await _updateScreen();
+      } while (mounted && _screenUpdatePending);
+    } finally {
+      _screenUpdateInProgress = false;
+      if (mounted && _screenUpdatePending) {
+        _queueScreenUpdate();
+      }
+    }
   }
 
   Future<void> _updateScreen() async {
@@ -61,6 +89,8 @@ class _VmrpWidgetState extends State<VmrpWidget> {
         _screenImage?.dispose();
         _screenImage = img;
       });
+    } else {
+      img.dispose();
     }
   }
 
@@ -75,10 +105,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     final scale = _paintScale;
     final x = (localPos.dx / scale).floor().clamp(0, engine.screenWidth - 1);
     final y = (localPos.dy / scale).floor().clamp(0, engine.screenHeight - 1);
-    return Offset(
-      x.toDouble(),
-      y.toDouble(),
-    );
+    return Offset(x.toDouble(), y.toDouble());
   }
 
   void _handlePointerDown(PointerDownEvent event) {
@@ -97,7 +124,20 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     }
     final p = _toMrpCoords(event.localPosition);
     _lastTouchPoint = p;
-    engine.sendTouchMove(p.dx.toInt(), p.dy.toInt());
+    _pendingMovePoint = p;
+    if (_moveFlushScheduled) {
+      return;
+    }
+    _moveFlushScheduled = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _moveFlushScheduled = false;
+      final pending = _pendingMovePoint;
+      _pendingMovePoint = null;
+      if (!mounted || pending == null || _activePointer != event.pointer) {
+        return;
+      }
+      engine.sendTouchMove(pending.dx.toInt(), pending.dy.toInt());
+    });
   }
 
   void _handlePointerUp(PointerUpEvent event) {
@@ -106,6 +146,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     }
     final p = _toMrpCoords(event.localPosition);
     _lastTouchPoint = p;
+    _pendingMovePoint = null;
     engine.sendTouchUp(p.dx.toInt(), p.dy.toInt());
     _activePointer = null;
     _lastTouchPoint = null;
@@ -119,6 +160,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
     if (p != null) {
       engine.sendTouchUp(p.dx.toInt(), p.dy.toInt());
     }
+    _pendingMovePoint = null;
     _activePointer = null;
     _lastTouchPoint = null;
   }
@@ -164,7 +206,11 @@ class _VmrpPainter extends CustomPainter {
     }
     canvas.save();
     canvas.scale(scale, scale);
-    canvas.drawImage(image!, Offset.zero, Paint()..filterQuality = FilterQuality.none);
+    canvas.drawImage(
+      image!,
+      Offset.zero,
+      Paint()..filterQuality = FilterQuality.none,
+    );
     canvas.restore();
   }
 

@@ -37,15 +37,36 @@ class VmrpKey {
   static const int select = 20;
 }
 
+enum VmrpImageProcessingMode {
+  native(0),
+  opencv(1);
+
+  final int code;
+
+  const VmrpImageProcessingMode(this.code);
+
+  static VmrpImageProcessingMode fromCode(int code) {
+    return switch (code) {
+      1 => VmrpImageProcessingMode.opencv,
+      _ => VmrpImageProcessingMode.native,
+    };
+  }
+}
+
 class VmrpEngine {
+  static const Duration _statePollInterval = Duration(milliseconds: 16);
+
   VmrpBindings? _bindings;
   final int screenWidth;
   final int screenHeight;
 
-  Timer? _timer;
+  Timer? _statePollTimer;
   VmrpAudioPlayer? _audioPlayer;
+  Pointer<Uint8>? _screenRgbaPtr;
+  Uint8List? _screenRgbaView;
   bool _running = false;
   bool _disposed = false;
+  bool _editRequestActive = false;
   String? lastError;
 
   final StreamController<void> _onScreenUpdate = StreamController.broadcast();
@@ -145,10 +166,11 @@ class VmrpEngine {
 
       if (ret == 0) {
         _running = true;
+        _editRequestActive = false;
         if (_bindings!.isRunning() == 0) {
           scheduleMicrotask(_markExited);
         } else {
-          _scheduleTimer();
+          _scheduleStatePoll();
         }
         _wakeAudio();
       } else {
@@ -166,56 +188,71 @@ class VmrpEngine {
     }
   }
 
+  int setImageProcessingMode(VmrpImageProcessingMode mode) {
+    if (!_ensureBindings()) return -1;
+    try {
+      final ret = _bindings!.setImageProcessingMode(mode.code);
+      if (ret != 0) {
+        lastError = 'vmrp_api_set_image_processing_mode returned $ret';
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_set_image_processing_mode crashed: $e';
+      return -1;
+    }
+  }
+
+  VmrpImageProcessingMode getImageProcessingMode() {
+    if (_bindings == null) return VmrpImageProcessingMode.native;
+    try {
+      return VmrpImageProcessingMode.fromCode(
+        _bindings!.getImageProcessingMode(),
+      );
+    } catch (_) {
+      return VmrpImageProcessingMode.native;
+    }
+  }
+
+  void requestScreenRefresh() {
+    if (!_running || _onScreenUpdate.isClosed) return;
+    _onScreenUpdate.add(null);
+  }
+
   void sendTouchDown(int x, int y) {
     if (!_running) return;
     _bindings!.event(VmrpEvent.mouseDown, x, y);
-    _checkState();
   }
 
   void sendTouchUp(int x, int y) {
     if (!_running) return;
     _bindings!.event(VmrpEvent.mouseUp, x, y);
-    _checkState();
   }
 
   void sendTouchMove(int x, int y) {
     if (!_running) return;
     _bindings!.event(VmrpEvent.mouseMove, x, y);
-    _checkState();
   }
 
   void sendKeyDown(int keyCode) {
     if (!_running) return;
     _bindings!.event(VmrpEvent.keyPress, keyCode, 0);
-    _checkState();
   }
 
   void sendKeyUp(int keyCode) {
     if (!_running) return;
     _bindings!.event(VmrpEvent.keyRelease, keyCode, 0);
-    _checkState();
   }
 
   Uint8List? getScreenRGBA() {
     if (_bindings == null) return null;
-    final ptr = _bindings!.getScreenBuffer();
+    final ptr = _bindings!.getScreenRgbaBuffer();
     if (ptr == nullptr) return null;
 
-    final pixelCount = screenWidth * screenHeight;
-    final rgb565 = ptr.asTypedList(pixelCount);
-    final rgba = Uint8List(pixelCount * 4);
-
-    for (int i = 0; i < pixelCount; i++) {
-      final c = rgb565[i];
-      final r = ((c >> 11) & 0x1F) * 255 ~/ 31;
-      final g = ((c >> 5) & 0x3F) * 255 ~/ 63;
-      final b = (c & 0x1F) * 255 ~/ 31;
-      rgba[i * 4 + 0] = r;
-      rgba[i * 4 + 1] = g;
-      rgba[i * 4 + 2] = b;
-      rgba[i * 4 + 3] = 255;
+    if (_screenRgbaPtr != ptr || _screenRgbaView == null) {
+      _screenRgbaPtr = ptr;
+      _screenRgbaView = ptr.asTypedList(screenWidth * screenHeight * 4);
     }
-    return rgba;
+    return _screenRgbaView;
   }
 
   void confirmEdit(String text) {
@@ -223,13 +260,11 @@ class VmrpEngine {
     final pText = text.toNativeUtf8();
     _bindings!.setEditText(pText.cast());
     malloc.free(pText);
-    _checkState();
   }
 
   void cancelEdit() {
     if (_bindings == null) return;
     _bindings!.cancelEdit();
-    _checkState();
   }
 
   void dispose() {
@@ -237,13 +272,16 @@ class VmrpEngine {
       return;
     }
     _disposed = true;
-    _timer?.cancel();
-    _timer = null;
+    _statePollTimer?.cancel();
+    _statePollTimer = null;
     _running = false;
+    _editRequestActive = false;
     unawaited(_audioPlayer?.dispose() ?? Future<void>.value());
     _audioPlayer = null;
     _bindings?.destroy();
     _bindings = null;
+    _screenRgbaPtr = null;
+    _screenRgbaView = null;
     _onScreenUpdate.close();
     _onEditRequest.close();
     _onExit.close();
@@ -258,31 +296,23 @@ class VmrpEngine {
     if (_bindings!.getScreenDirty() != 0) {
       _onScreenUpdate.add(null);
     }
-    if (_bindings!.isEditActive() != 0) {
+    final editActive = _bindings!.isEditActive() != 0;
+    if (editActive && !_editRequestActive) {
+      _editRequestActive = true;
       _onEditRequest.add(null);
+    } else if (!editActive) {
+      _editRequestActive = false;
     }
     _wakeAudio();
-    _scheduleTimer();
+    _scheduleStatePoll();
   }
 
-  void _scheduleTimer() {
-    _timer?.cancel();
-    _timer = null;
-    if (!_running || _bindings == null) return;
-
-    final ms = _bindings!.getTimerInterval();
-    if (ms > 0) {
-      _timer = Timer(Duration(milliseconds: ms), () {
-        if (!_running) return;
-        _bindings?.timer();
-        if (_bindings?.isRunning() == 0) {
-          _markExited();
-          return;
-        }
-        _wakeAudio();
-        _checkState();
-      });
-    }
+  void _scheduleStatePoll() {
+    if (!_running || _bindings == null || _statePollTimer != null) return;
+    _statePollTimer = Timer.periodic(_statePollInterval, (_) {
+      if (!_running) return;
+      _checkState();
+    });
   }
 
   void _wakeAudio() {
@@ -300,9 +330,10 @@ class VmrpEngine {
 
   void _markExited() {
     if (!_running) return;
-    _timer?.cancel();
-    _timer = null;
+    _statePollTimer?.cancel();
+    _statePollTimer = null;
     _running = false;
+    _editRequestActive = false;
     unawaited(_audioPlayer?.stop() ?? Future<void>.value());
     if (!_onExit.isClosed) {
       _onExit.add(null);
