@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -10,6 +11,9 @@ const String kDefaultAppStoreSecret = 'dev-app-secret-change-me';
 
 const _emptyBodySha256 =
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+typedef DownloadProgressCallback =
+    void Function(int downloadedBytes, int totalBytes);
 
 class AppStoreApiConfig {
   final String baseUrl;
@@ -481,18 +485,19 @@ class AppStoreClient {
   Future<DownloadedEmulatorApk> downloadEmulatorVersion({
     required AppStoreEmulatorVersion version,
     required Directory destinationDir,
+    DownloadProgressCallback? onProgress,
   }) async {
     if (!await destinationDir.exists()) {
       await destinationDir.create(recursive: true);
     }
 
-    final file = File(
-      '${destinationDir.path}${Platform.pathSeparator}'
-      '${_emulatorApkFileName(version)}',
+    final downloadedApk = await _findDownloadedEmulatorApk(
+      version: version,
+      destinationDir: destinationDir,
     );
-    if (await _isCompleteDownloadedEmulatorApk(file, version)) {
+    if (downloadedApk != null) {
       return DownloadedEmulatorApk(
-        file: file,
+        file: downloadedApk,
         version: version,
         alreadyDownloaded: true,
       );
@@ -511,7 +516,10 @@ class AppStoreClient {
       response.headers.value('content-disposition'),
     );
     final target = headerName == null
-        ? file
+        ? File(
+            '${destinationDir.path}${Platform.pathSeparator}'
+            '${_emulatorApkFileName(version)}',
+          )
         : File(
             '${destinationDir.path}${Platform.pathSeparator}'
             '${_sanitizeApkFileName(headerName)}',
@@ -523,7 +531,14 @@ class AppStoreClient {
     }
 
     try {
-      await response.pipe(tempFile.openWrite());
+      await _writeResponseToFile(
+        response,
+        tempFile,
+        totalBytes: version.fileSize > 0
+            ? version.fileSize
+            : response.contentLength,
+        onProgress: onProgress,
+      );
       if (await target.exists()) {
         await target.delete();
       }
@@ -536,6 +551,32 @@ class AppStoreClient {
     }
 
     return DownloadedEmulatorApk(file: target, version: version);
+  }
+
+  Future<void> _writeResponseToFile(
+    HttpClientResponse response,
+    File file, {
+    required int totalBytes,
+    DownloadProgressCallback? onProgress,
+  }) async {
+    final sink = file.openWrite();
+    var downloadedBytes = 0;
+    var closed = false;
+    onProgress?.call(downloadedBytes, totalBytes);
+    try {
+      await for (final chunk in response) {
+        downloadedBytes += chunk.length;
+        sink.add(chunk);
+        onProgress?.call(downloadedBytes, totalBytes);
+      }
+      await sink.close();
+      closed = true;
+    } catch (_) {
+      if (!closed) {
+        await sink.close();
+      }
+      rethrow;
+    }
   }
 
   Future<AppStoreConfig> fetchConfig() async {
@@ -704,6 +745,28 @@ class AppStoreClient {
     return version.fileSize <= 0 || length == version.fileSize;
   }
 
+  Future<File?> _findDownloadedEmulatorApk({
+    required AppStoreEmulatorVersion version,
+    required Directory destinationDir,
+  }) async {
+    for (final fileName in _downloadedEmulatorApkNameCandidates(version)) {
+      final file = File(
+        '${destinationDir.path}${Platform.pathSeparator}$fileName',
+      );
+      if (await _isCompleteDownloadedEmulatorApk(file, version)) {
+        return file;
+      }
+    }
+
+    await for (final entity in destinationDir.list(followLinks: false)) {
+      if (entity is File &&
+          await _isCompleteDownloadedEmulatorApk(entity, version)) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
   Iterable<String> _downloadedFileNameCandidates({
     required AppStoreApp app,
     required AppStoreVersion version,
@@ -717,6 +780,18 @@ class AppStoreClient {
     final packageName = _filenameFromDownloadPath(package?.downloadUrl);
     if (packageName != null) {
       yield _sanitizeMrpFileName(packageName);
+    }
+  }
+
+  Iterable<String> _downloadedEmulatorApkNameCandidates(
+    AppStoreEmulatorVersion version,
+  ) sync* {
+    yield _emulatorApkFileName(version);
+    if (version.downloadUrl != null && version.downloadUrl!.isNotEmpty) {
+      final name = Uri.parse(version.downloadUrl!).path.split('/').last.trim();
+      if (name.toLowerCase().endsWith('.apk')) {
+        yield _sanitizeApkFileName(name);
+      }
     }
   }
 

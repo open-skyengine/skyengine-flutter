@@ -1,8 +1,12 @@
 package cn.jysafe.skyengine
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.res.AssetManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -11,6 +15,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -24,6 +32,8 @@ import java.util.zip.ZipInputStream
 class MainActivity : FlutterActivity() {
     private var mrpOpenChannel: MethodChannel? = null
     private var initialMrpPath: String? = null
+    private var pendingInstallApk: File? = null
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -112,6 +122,12 @@ class MainActivity : FlutterActivity() {
                         try {
                             installApk(File(path))
                             result.success(null)
+                        } catch (error: InstallPermissionRequiredException) {
+                            result.error(
+                                ERROR_INSTALL_PERMISSION_REQUIRED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
                         } catch (error: Exception) {
                             result.error(
                                 ERROR_APP_UPDATE_FAILED,
@@ -119,6 +135,48 @@ class MainActivity : FlutterActivity() {
                                 error.javaClass.name,
                             )
                         }
+                    }
+                    METHOD_ENSURE_DOWNLOAD_NOTIFICATION_PERMISSION -> {
+                        requestDownloadNotificationPermission(result)
+                    }
+                    METHOD_SHOW_DOWNLOAD_PROGRESS -> {
+                        val downloadedBytes = call.argument<Number>(ARG_DOWNLOADED_BYTES)?.toLong()
+                        val totalBytes = call.argument<Number>(ARG_TOTAL_BYTES)?.toLong()
+                        if (downloadedBytes == null || totalBytes == null) {
+                            result.error(
+                                ERROR_BAD_ARGUMENTS,
+                                "Missing $ARG_DOWNLOADED_BYTES or $ARG_TOTAL_BYTES",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+
+                        showUpdateDownloadProgress(downloadedBytes, totalBytes)
+                        result.success(null)
+                    }
+                    METHOD_SHOW_DOWNLOAD_COMPLETE -> {
+                        val path = call.argument<String>(ARG_APK_PATH)
+                        if (path.isNullOrBlank()) {
+                            result.error(
+                                ERROR_BAD_ARGUMENTS,
+                                "Missing $ARG_APK_PATH",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+
+                        showUpdateDownloadComplete(File(path))
+                        result.success(null)
+                    }
+                    METHOD_SHOW_DOWNLOAD_FAILED -> {
+                        showUpdateDownloadFailed(
+                            call.argument<String>(ARG_MESSAGE).orEmpty(),
+                        )
+                        result.success(null)
+                    }
+                    METHOD_CANCEL_DOWNLOAD_NOTIFICATION -> {
+                        cancelUpdateDownloadNotification()
+                        result.success(null)
                     }
                     else -> result.notImplemented()
                 }
@@ -131,6 +189,31 @@ class MainActivity : FlutterActivity() {
 
         val mrpPath = importMrpFromIntent(intent) ?: return
         mrpOpenChannel?.invokeMethod(METHOD_OPEN_MRP, mrpPath)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val apk = pendingInstallApk ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
+        ) {
+            pendingInstallApk = null
+            openApkInstaller(apk)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            return
+        }
+
+        pendingNotificationPermissionResult?.success(canShowUpdateDownloadNotification())
+        pendingNotificationPermissionResult = null
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -235,15 +318,27 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
+            pendingInstallApk = apk
             startActivity(
                 Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:$packageName"),
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            error("Please allow this app to install unknown apps and retry")
+            throw InstallPermissionRequiredException(
+                "请允许安装未知来源应用，返回后会自动继续安装",
+            )
         }
 
+        openApkInstaller(apk)
+    }
+
+    private class InstallPermissionRequiredException(message: String) : Exception(message)
+
+    private fun openApkInstaller(apk: File) {
+        if (!apk.isFile) {
+            error("APK not found: ${apk.absolutePath}")
+        }
         val uri = FileProvider.getUriForFile(
             this,
             "$packageName.fileprovider",
@@ -255,6 +350,160 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun showUpdateDownloadProgress(downloadedBytes: Long, totalBytes: Long) {
+        if (!canShowUpdateDownloadNotification()) {
+            return
+        }
+        ensureUpdateNotificationChannel()
+
+        val hasTotal = totalBytes > 0
+        val progress = if (hasTotal) {
+            ((downloadedBytes * 100L) / totalBytes).coerceIn(0L, 100L).toInt()
+        } else {
+            0
+        }
+        val text = if (hasTotal) {
+            "$progress%（${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}）"
+        } else {
+            "已下载 ${formatBytes(downloadedBytes)}"
+        }
+        val notification = updateNotificationBuilder()
+            .setContentTitle("正在下载更新")
+            .setContentText(text)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(if (hasTotal) 100 else 0, progress, !hasTotal)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
+    private fun showUpdateDownloadComplete(apk: File) {
+        if (!canShowUpdateDownloadNotification()) {
+            return
+        }
+        ensureUpdateNotificationChannel()
+        val notification = updateNotificationBuilder()
+            .setContentTitle("更新下载完成")
+            .setContentText(apk.name)
+            .setOngoing(false)
+            .setOnlyAlertOnce(false)
+            .setProgress(0, 0, false)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
+    private fun showUpdateDownloadFailed(message: String) {
+        if (!canShowUpdateDownloadNotification()) {
+            return
+        }
+        ensureUpdateNotificationChannel()
+        val text = message.ifBlank { "请稍后重试" }
+        val notification = updateNotificationBuilder()
+            .setContentTitle("更新下载失败")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOngoing(false)
+            .setOnlyAlertOnce(false)
+            .setProgress(0, 0, false)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
+    private fun cancelUpdateDownloadNotification() {
+        NotificationManagerCompat.from(this).cancel(UPDATE_NOTIFICATION_ID)
+    }
+
+    private fun updateNotificationBuilder(): NotificationCompat.Builder {
+        return NotificationCompat.Builder(this, UPDATE_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+    }
+
+    private fun ensureUpdateNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(UPDATE_NOTIFICATION_CHANNEL_ID) != null) {
+            return
+        }
+        val channel = NotificationChannel(
+            UPDATE_NOTIFICATION_CHANNEL_ID,
+            "应用更新",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "显示应用更新下载进度"
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun requestDownloadNotificationPermission(result: MethodChannel.Result) {
+        if (canShowUpdateDownloadNotification()) {
+            result.success(true)
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            hasNotificationPermission()
+        ) {
+            result.success(false)
+            return
+        }
+
+        pendingNotificationPermissionResult?.success(false)
+        pendingNotificationPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE,
+        )
+    }
+
+    private fun canShowUpdateDownloadNotification(): Boolean {
+        if (!hasNotificationPermission()) {
+            return false
+        }
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            return false
+        }
+        return !isUpdateNotificationChannelBlocked()
+    }
+
+    private fun isUpdateNotificationChannelBlocked(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return false
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        val channel = manager.getNotificationChannel(UPDATE_NOTIFICATION_CHANNEL_ID)
+        return channel?.importance == NotificationManager.IMPORTANCE_NONE
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return true
+        }
+        return ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024L) {
+            return "${bytes.coerceAtLeast(0L)} B"
+        }
+        val kib = bytes / 1024.0
+        if (kib < 1024.0) {
+            return String.format("%.1f KB", kib)
+        }
+        return String.format("%.1f MB", kib / 1024.0)
     }
 
     private fun ensureMythroadSystem(mythroadDir: File): String {
@@ -382,8 +631,21 @@ class MainActivity : FlutterActivity() {
         const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
+        const val METHOD_ENSURE_DOWNLOAD_NOTIFICATION_PERMISSION =
+            "ensureDownloadNotificationPermission"
+        const val METHOD_SHOW_DOWNLOAD_PROGRESS = "showDownloadProgress"
+        const val METHOD_SHOW_DOWNLOAD_COMPLETE = "showDownloadComplete"
+        const val METHOD_SHOW_DOWNLOAD_FAILED = "showDownloadFailed"
+        const val METHOD_CANCEL_DOWNLOAD_NOTIFICATION = "cancelDownloadNotification"
         const val ARG_APK_PATH = "path"
+        const val ARG_DOWNLOADED_BYTES = "downloadedBytes"
+        const val ARG_TOTAL_BYTES = "totalBytes"
+        const val ARG_MESSAGE = "message"
         const val ERROR_APP_UPDATE_FAILED = "APP_UPDATE_FAILED"
+        const val ERROR_INSTALL_PERMISSION_REQUIRED = "INSTALL_PERMISSION_REQUIRED"
+        const val UPDATE_NOTIFICATION_CHANNEL_ID = "app_update"
+        const val UPDATE_NOTIFICATION_ID = 1001
+        const val NOTIFICATION_PERMISSION_REQUEST_CODE = 2001
         const val MRP_OPEN_CHANNEL = "skyengine/mrp_open"
         const val METHOD_GET_INITIAL_MRP = "getInitialMrp"
         const val METHOD_OPEN_MRP = "openMrp"
