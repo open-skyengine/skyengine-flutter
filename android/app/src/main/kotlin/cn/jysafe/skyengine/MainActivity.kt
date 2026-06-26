@@ -15,6 +15,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.KeyEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -31,9 +32,12 @@ import java.util.zip.ZipInputStream
 
 class MainActivity : FlutterActivity() {
     private var mrpOpenChannel: MethodChannel? = null
+    private var hardwareKeysChannel: MethodChannel? = null
     private var initialMrpPath: String? = null
     private var pendingInstallApk: File? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
+    private var hardwareKeyCaptureEnabled = false
+    private val pressedHardwareKeys = mutableMapOf<Int, Int>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,6 +47,23 @@ class MainActivity : FlutterActivity() {
         mrpOpenChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 METHOD_GET_INITIAL_MRP -> result.success(initialMrpPath)
+                else -> result.notImplemented()
+            }
+        }
+
+        hardwareKeysChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            HARDWARE_KEYS_CHANNEL,
+        )
+        hardwareKeysChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                METHOD_SET_HARDWARE_KEYS_ENABLED -> {
+                    hardwareKeyCaptureEnabled = call.arguments as? Boolean ?: false
+                    if (!hardwareKeyCaptureEnabled) {
+                        pressedHardwareKeys.clear()
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -216,9 +237,35 @@ class MainActivity : FlutterActivity() {
         pendingNotificationPermissionResult = null
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val vmrpKeyCode = vmrpKeyCodeForAndroidKey(event)
+        if (hardwareKeyCaptureEnabled && vmrpKeyCode != null) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        pressedHardwareKeys[event.keyCode] = vmrpKeyCode
+                        hardwareKeysChannel?.invokeMethod(METHOD_HARDWARE_KEY_DOWN, vmrpKeyCode)
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    val pressedKeyCode =
+                        pressedHardwareKeys.remove(event.keyCode) ?: vmrpKeyCode
+                    hardwareKeysChannel?.invokeMethod(METHOD_HARDWARE_KEY_UP, pressedKeyCode)
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         mrpOpenChannel?.setMethodCallHandler(null)
         mrpOpenChannel = null
+        hardwareKeysChannel?.setMethodCallHandler(null)
+        hardwareKeysChannel = null
+        hardwareKeyCaptureEnabled = false
+        pressedHardwareKeys.clear()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -624,10 +671,43 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun vmrpKeyCodeForAndroidKey(event: KeyEvent): Int? {
+        val unicodeChar = event.unicodeChar
+        if (unicodeChar in '0'.code..'9'.code) {
+            return unicodeChar - '0'.code
+        }
+        if (unicodeChar == '*'.code) {
+            return VMRP_KEY_STAR
+        }
+        if (unicodeChar == '#'.code) {
+            return VMRP_KEY_POUND
+        }
+
+        return when (event.keyCode) {
+            KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_NUMPAD_0 -> VMRP_KEY_0
+            KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_NUMPAD_1 -> VMRP_KEY_1
+            KeyEvent.KEYCODE_2, KeyEvent.KEYCODE_NUMPAD_2 -> VMRP_KEY_2
+            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_NUMPAD_3 -> VMRP_KEY_3
+            KeyEvent.KEYCODE_4, KeyEvent.KEYCODE_NUMPAD_4 -> VMRP_KEY_4
+            KeyEvent.KEYCODE_5, KeyEvent.KEYCODE_NUMPAD_5 -> VMRP_KEY_5
+            KeyEvent.KEYCODE_6, KeyEvent.KEYCODE_NUMPAD_6 -> VMRP_KEY_6
+            KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_NUMPAD_7 -> VMRP_KEY_7
+            KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_NUMPAD_8 -> VMRP_KEY_8
+            KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> VMRP_KEY_9
+            KeyEvent.KEYCODE_STAR, KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> VMRP_KEY_STAR
+            KeyEvent.KEYCODE_POUND -> VMRP_KEY_POUND
+            else -> null
+        }
+    }
+
     private companion object {
         const val HAPTICS_CHANNEL = "skyengine/haptics"
         const val METHOD_VIRTUAL_KEY_VIBRATE = "virtualKeyVibrate"
         const val ERROR_VIBRATION_FAILED = "VIBRATION_FAILED"
+        const val HARDWARE_KEYS_CHANNEL = "skyengine/hardware_keys"
+        const val METHOD_SET_HARDWARE_KEYS_ENABLED = "setEnabled"
+        const val METHOD_HARDWARE_KEY_DOWN = "keyDown"
+        const val METHOD_HARDWARE_KEY_UP = "keyUp"
         const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
@@ -663,5 +743,17 @@ class MainActivity : FlutterActivity() {
         const val VIRTUAL_KEY_SILENCE_MS = 1000L
         const val NO_REPEAT = -1
         const val TAG = "SkyEngine"
+        const val VMRP_KEY_0 = 0
+        const val VMRP_KEY_1 = 1
+        const val VMRP_KEY_2 = 2
+        const val VMRP_KEY_3 = 3
+        const val VMRP_KEY_4 = 4
+        const val VMRP_KEY_5 = 5
+        const val VMRP_KEY_6 = 6
+        const val VMRP_KEY_7 = 7
+        const val VMRP_KEY_8 = 8
+        const val VMRP_KEY_9 = 9
+        const val VMRP_KEY_STAR = 10
+        const val VMRP_KEY_POUND = 11
     }
 }

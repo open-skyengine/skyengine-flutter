@@ -89,6 +89,7 @@ class _ScreenResolution {
 }
 
 enum _PlayerMenuAction {
+  toggleFullscreen,
   switchKeyboard,
   switchResolution,
   switchImageProcessing,
@@ -97,6 +98,9 @@ enum _PlayerMenuAction {
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const MethodChannel _hapticsChannel = MethodChannel(
     'skyengine/haptics',
+  );
+  static const MethodChannel _hardwareKeysChannel = MethodChannel(
+    'skyengine/hardware_keys',
   );
   static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
   static const double _keypadGap = 18;
@@ -112,10 +116,12 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
+  final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
   _KeypadMode _keypadMode = _KeypadMode.directional;
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
+  bool _isFullscreen = false;
   late _ScreenResolution _currentResolution;
   VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
@@ -131,6 +137,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   @override
   void initState() {
     super.initState();
+    _hardwareKeysChannel.setMethodCallHandler(_handleHardwareKeyCall);
+    unawaited(_setHardwareKeyCapture(true));
     _currentResolution = _ScreenResolution(
       widget.screenWidth,
       widget.screenHeight,
@@ -149,6 +157,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     }
     final file = File(widget.mrpPath);
     if (!file.existsSync()) {
+      unawaited(_setHardwareKeyCapture(false));
       setState(() => _error = 'MRP file not found:\n${widget.mrpPath}');
       return;
     }
@@ -168,6 +177,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     final initRet = engine.init();
     debugPrint('[VMRP] init() returned $initRet');
     if (initRet != 0) {
+      unawaited(_setHardwareKeyCapture(false));
       setState(() => _error = 'Engine init failed: ${engine.lastError}');
       engine.dispose();
       return;
@@ -175,6 +185,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
     final imageModeRet = engine.setImageProcessingMode(_imageProcessingMode);
     if (imageModeRet != 0) {
+      unawaited(_setHardwareKeyCapture(false));
       setState(
         () => _error = 'Set image processing failed: ${engine.lastError}',
       );
@@ -189,6 +200,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     );
     debugPrint('[VMRP] start() returned $startRet');
     if (startRet != 0) {
+      unawaited(_setHardwareKeyCapture(false));
       setState(() => _error = 'Engine start failed: ${engine.lastError}');
       engine.dispose();
       return;
@@ -223,9 +235,82 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   @override
   void dispose() {
+    _hardwareKeysChannel.setMethodCallHandler(null);
+    unawaited(_setHardwareKeyCapture(false));
+    if (_isFullscreen) {
+      unawaited(_setSystemUiFullscreen(false));
+    }
     _shutdownEngine();
     _keyboardFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleHardwareKeyCall(MethodCall call) async {
+    final keyCode = call.arguments;
+    if (keyCode is! int) {
+      return;
+    }
+
+    final engine = _engine;
+    if (engine == null) {
+      return;
+    }
+
+    switch (call.method) {
+      case 'keyDown':
+        engine.sendKeyDown(keyCode);
+      case 'keyUp':
+        engine.sendKeyUp(keyCode);
+    }
+  }
+
+  Future<void> _setHardwareKeyCapture(bool enabled) async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      await _hardwareKeysChannel.invokeMethod<void>('setEnabled', enabled);
+    } on PlatformException catch (error) {
+      debugPrint(
+        '[VMRP] hardware key capture failed: '
+        '${error.code}, ${error.message}, ${error.details}',
+      );
+    } on MissingPluginException catch (error) {
+      debugPrint('[VMRP] hardware key capture channel missing: $error');
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[VMRP] hardware key capture failed: $error');
+    }
+  }
+
+  int? _keyCodeForKeyEvent(KeyEvent event) {
+    final character = event.character;
+    if (character != null && character.length == 1) {
+      final keyCode = _keyCodeForCharacter(character);
+      if (keyCode != null) {
+        return keyCode;
+      }
+    }
+    return _keyCodeForLogicalKey(event.logicalKey);
+  }
+
+  int? _keyCodeForCharacter(String character) {
+    return switch (character) {
+      '0' => VmrpKey.key0,
+      '1' => VmrpKey.key1,
+      '2' => VmrpKey.key2,
+      '3' => VmrpKey.key3,
+      '4' => VmrpKey.key4,
+      '5' => VmrpKey.key5,
+      '6' => VmrpKey.key6,
+      '7' => VmrpKey.key7,
+      '8' => VmrpKey.key8,
+      '9' => VmrpKey.key9,
+      '*' => VmrpKey.star,
+      '#' => VmrpKey.pound,
+      _ => null,
+    };
   }
 
   int? _keyCodeForLogicalKey(LogicalKeyboardKey key) {
@@ -255,6 +340,33 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
       return VmrpKey.key0;
     }
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
+      return VmrpKey.key1;
+    }
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
+      return VmrpKey.key2;
+    }
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
+      return VmrpKey.key3;
+    }
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
+      return VmrpKey.key4;
+    }
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
+      return VmrpKey.key5;
+    }
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
+      return VmrpKey.key6;
+    }
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
+      return VmrpKey.key7;
+    }
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
+      return VmrpKey.key8;
+    }
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
+      return VmrpKey.key9;
+    }
     if (key == LogicalKeyboardKey.asterisk ||
         key == LogicalKeyboardKey.numpadMultiply) {
       return VmrpKey.star;
@@ -271,20 +383,62 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return KeyEventResult.ignored;
     }
 
-    final keyCode = _keyCodeForLogicalKey(event.logicalKey);
-    if (keyCode == null) {
-      return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      final pressedKeyCode = _pressedKeyboardKeys[event.physicalKey];
+      if (pressedKeyCode != null) {
+        return KeyEventResult.handled;
+      }
+      final keyCode = _keyCodeForKeyEvent(event);
+      if (keyCode == null) {
+        return KeyEventResult.ignored;
+      }
+      _pressedKeyboardKeys[event.physicalKey] = keyCode;
+      engine.sendKeyDown(keyCode);
+      return KeyEventResult.handled;
     }
 
-    if (event is KeyDownEvent) {
-      engine.sendKeyDown(keyCode);
-    } else if (event is KeyUpEvent) {
-      engine.sendKeyUp(keyCode);
+    if (event is KeyRepeatEvent) {
+      final keyCode =
+          _pressedKeyboardKeys[event.physicalKey] ?? _keyCodeForKeyEvent(event);
+      return keyCode == null ? KeyEventResult.ignored : KeyEventResult.handled;
     }
-    return KeyEventResult.handled;
+
+    if (event is KeyUpEvent) {
+      final keyCode =
+          _pressedKeyboardKeys.remove(event.physicalKey) ??
+          _keyCodeForKeyEvent(event);
+      if (keyCode == null) {
+        return KeyEventResult.ignored;
+      }
+      engine.sendKeyUp(keyCode);
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _releasePressedKeyboardKeys() {
+    final engine = _engine;
+    if (engine != null) {
+      for (final keyCode in _pressedKeyboardKeys.values) {
+        engine.sendKeyUp(keyCode);
+      }
+    }
+    _pressedKeyboardKeys.clear();
+  }
+
+  void _handleKeyboardFocusChange(bool hasFocus) {
+    if (!hasFocus) {
+      _releasePressedKeyboardKeys();
+    }
   }
 
   Future<void> _showEditDialog() async {
+    _releasePressedKeyboardKeys();
+    await _setHardwareKeyCapture(false);
+    if (!mounted || _disposedEngine) {
+      return;
+    }
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) {
@@ -306,6 +460,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       },
     );
 
+    if (mounted && !_disposedEngine) {
+      unawaited(_setHardwareKeyCapture(true));
+      _keyboardFocusNode.requestFocus();
+    }
+
     if (result != null) {
       _engine?.confirmEdit(result);
     } else {
@@ -316,8 +475,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   void _closePlayer() {
     if (_exiting || !mounted) return;
     _exiting = true;
+    if (_isFullscreen) {
+      setState(() => _isFullscreen = false);
+      unawaited(_setSystemUiFullscreen(false));
+    }
     _shutdownEngine();
-    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   void _handleBack() {
@@ -325,8 +492,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
     _exiting = true;
+    if (_isFullscreen) {
+      setState(() => _isFullscreen = false);
+      unawaited(_setSystemUiFullscreen(false));
+    }
     _shutdownEngine();
-    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   void _shutdownEngine() {
@@ -334,12 +509,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       return;
     }
     _disposedEngine = true;
+    unawaited(_setHardwareKeyCapture(false));
+    _releasePressedKeyboardKeys();
     final engine = _engine;
     _engine = null;
     engine?.dispose();
   }
 
   void _disposeCurrentEngineForRestart() {
+    unawaited(_setHardwareKeyCapture(false));
+    _releasePressedKeyboardKeys();
     final engine = _engine;
     _engine = null;
     engine?.dispose();
@@ -347,12 +526,47 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   void _handleMenuAction(_PlayerMenuAction action) {
     switch (action) {
+      case _PlayerMenuAction.toggleFullscreen:
+        unawaited(_setFullscreen(!_isFullscreen));
       case _PlayerMenuAction.switchKeyboard:
         unawaited(_showKeyboardDialog());
       case _PlayerMenuAction.switchResolution:
         unawaited(_showResolutionDialog());
       case _PlayerMenuAction.switchImageProcessing:
         unawaited(_showImageProcessingDialog());
+    }
+  }
+
+  Future<void> _setFullscreen(bool enabled) async {
+    if (!mounted || _isFullscreen == enabled) {
+      _keyboardFocusNode.requestFocus();
+      return;
+    }
+    setState(() => _isFullscreen = enabled);
+    await _setSystemUiFullscreen(enabled);
+    if (mounted) {
+      _keyboardFocusNode.requestFocus();
+    }
+  }
+
+  Future<void> _setSystemUiFullscreen(bool enabled) async {
+    try {
+      if (enabled) {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        await SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: SystemUiOverlay.values,
+        );
+      }
+    } on PlatformException catch (error) {
+      debugPrint(
+        '[VMRP] set fullscreen system UI failed: '
+        '${error.code}, ${error.message}, ${error.details}',
+      );
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[VMRP] set fullscreen system UI failed: $error');
     }
   }
 
@@ -440,6 +654,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       _currentResolution = resolution;
       _error = null;
     });
+    unawaited(_setHardwareKeyCapture(true));
     Future.delayed(Duration.zero, _startEngine);
     _keyboardFocusNode.requestFocus();
   }
@@ -519,128 +734,182 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: true,
+      canPop: !_isFullscreen,
       onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isFullscreen) {
+          unawaited(_setFullscreen(false));
+          return;
+        }
         if (didPop) {
           _shutdownEngine();
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('VMRP'),
-          leading: BackButton(onPressed: _handleBack),
-          actions: [
-            PopupMenuButton<_PlayerMenuAction>(
-              tooltip: '更多',
-              icon: const Icon(Icons.more_vert),
-              onSelected: _handleMenuAction,
-              itemBuilder: (context) {
-                return [
-                  PopupMenuItem(
-                    value: _PlayerMenuAction.switchKeyboard,
-                    child: Row(
-                      children: [
-                        Icon(
-                          _keypadMode == _KeypadMode.none
-                              ? Icons.keyboard_hide
-                              : Icons.keyboard,
-                        ),
-                        const SizedBox(width: 12),
-                        const Text('切换键盘'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _PlayerMenuAction.switchResolution,
-                    child: Row(
-                      children: [
-                        Icon(Icons.aspect_ratio),
-                        SizedBox(width: 12),
-                        Text('切换分辨率'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _PlayerMenuAction.switchImageProcessing,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.image),
-                        const SizedBox(width: 12),
-                        Text('图像处理方式: ${_imageProcessingMode.label}'),
-                      ],
-                    ),
-                  ),
-                ];
-              },
-            ),
-          ],
-        ),
+        appBar: _isFullscreen ? null : _buildAppBar(),
         body: Focus(
           focusNode: _keyboardFocusNode,
           autofocus: true,
           onKeyEvent: _handleKeyEvent,
-          child: _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _handleBack,
-                          child: const Text('返回'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _engine == null
-              ? const Center(child: CircularProgressIndicator())
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final hasVirtualKeypad = _keypadMode != _KeypadMode.none;
-                    final keypadHeight = _keypadReservedHeight;
-                    final gap = hasVirtualKeypad ? _keypadGap : 0.0;
-                    final maxScreenWidth = constraints.maxWidth;
-                    final maxScreenHeight =
-                        constraints.maxHeight - keypadHeight - gap;
-                    final scale = [
-                      maxScreenWidth / _engine!.screenWidth,
-                      maxScreenHeight > 0
-                          ? maxScreenHeight / _engine!.screenHeight
-                          : 0.1,
-                      2.0,
-                    ].reduce((a, b) => a < b ? a : b);
-                    final screenWidth = _engine!.screenWidth * scale;
-                    final screenHeight = _engine!.screenHeight * scale;
+          onFocusChange: _handleKeyboardFocusChange,
+          child: Stack(
+            children: [
+              ColoredBox(
+                color: _isFullscreen
+                    ? Colors.black
+                    : Theme.of(context).scaffoldBackgroundColor,
+                child: _buildPlayerBody(),
+              ),
+              if (_isFullscreen) _buildFullscreenExitButton(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                    return Align(
-                      alignment: Alignment.topCenter,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          VmrpWidget(
-                            engine: _engine!,
-                            width: screenWidth,
-                            height: screenHeight,
-                          ),
-                          if (hasVirtualKeypad) ...[
-                            SizedBox(height: gap),
-                            _buildKeypad(),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text('VMRP'),
+      leading: BackButton(onPressed: _handleBack),
+      actions: [
+        PopupMenuButton<_PlayerMenuAction>(
+          tooltip: '更多',
+          icon: const Icon(Icons.more_vert),
+          onSelected: _handleMenuAction,
+          itemBuilder: (context) {
+            return [
+              PopupMenuItem(
+                value: _PlayerMenuAction.toggleFullscreen,
+                child: Row(
+                  children: [
+                    Icon(
+                      _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(_isFullscreen ? '退出全屏' : '进入全屏'),
+                  ],
                 ),
+              ),
+              PopupMenuItem(
+                value: _PlayerMenuAction.switchKeyboard,
+                child: Row(
+                  children: [
+                    Icon(
+                      _keypadMode == _KeypadMode.none
+                          ? Icons.keyboard_hide
+                          : Icons.keyboard,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('切换键盘'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: _PlayerMenuAction.switchResolution,
+                child: Row(
+                  children: [
+                    Icon(Icons.aspect_ratio),
+                    SizedBox(width: 12),
+                    Text('切换分辨率'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: _PlayerMenuAction.switchImageProcessing,
+                child: Row(
+                  children: [
+                    const Icon(Icons.image),
+                    const SizedBox(width: 12),
+                    Text('图像处理方式: ${_imageProcessingMode.label}'),
+                  ],
+                ),
+              ),
+            ];
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlayerBody() {
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _isFullscreen ? Colors.white : null),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: _handleBack, child: const Text('返回')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_engine == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hasVirtualKeypad =
+            !_isFullscreen && _keypadMode != _KeypadMode.none;
+        final keypadHeight = hasVirtualKeypad ? _keypadReservedHeight : 0.0;
+        final gap = hasVirtualKeypad ? _keypadGap : 0.0;
+        final maxScreenWidth = constraints.maxWidth;
+        final maxScreenHeight = constraints.maxHeight - keypadHeight - gap;
+        final maxScale = _isFullscreen ? double.infinity : 2.0;
+        final scale = [
+          maxScreenWidth / _engine!.screenWidth,
+          maxScreenHeight > 0 ? maxScreenHeight / _engine!.screenHeight : 0.1,
+          maxScale,
+        ].reduce((a, b) => a < b ? a : b);
+        final screenWidth = _engine!.screenWidth * scale;
+        final screenHeight = _engine!.screenHeight * scale;
+
+        return Align(
+          alignment: _isFullscreen ? Alignment.center : Alignment.topCenter,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              VmrpWidget(
+                engine: _engine!,
+                width: screenWidth,
+                height: screenHeight,
+              ),
+              if (hasVirtualKeypad) ...[SizedBox(height: gap), _buildKeypad()],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFullscreenExitButton() {
+    return Positioned(
+      top: 0,
+      right: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Material(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(4),
+            child: IconButton(
+              tooltip: '退出全屏',
+              color: Colors.white,
+              icon: const Icon(Icons.fullscreen_exit),
+              onPressed: () => unawaited(_setFullscreen(false)),
+            ),
+          ),
         ),
       ),
     );
