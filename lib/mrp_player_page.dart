@@ -44,6 +44,13 @@ extension on _KeypadMode {
   };
 }
 
+extension on VmrpImageProcessingMode {
+  String get label => switch (this) {
+    VmrpImageProcessingMode.native => 'Native',
+    VmrpImageProcessingMode.opencv => 'OpenCV',
+  };
+}
+
 class MrpPlayerPage extends StatefulWidget {
   final String mrpPath;
   final String? dnsMap;
@@ -81,7 +88,11 @@ class _ScreenResolution {
   int get hashCode => Object.hash(width, height);
 }
 
-enum _PlayerMenuAction { switchKeyboard, switchResolution }
+enum _PlayerMenuAction {
+  switchKeyboard,
+  switchResolution,
+  switchImageProcessing,
+}
 
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const MethodChannel _hapticsChannel = MethodChannel(
@@ -106,6 +117,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   bool _exiting = false;
   bool _disposedEngine = false;
   late _ScreenResolution _currentResolution;
+  VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
 
   double get _keypadReservedHeight {
@@ -157,6 +169,15 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     debugPrint('[VMRP] init() returned $initRet');
     if (initRet != 0) {
       setState(() => _error = 'Engine init failed: ${engine.lastError}');
+      engine.dispose();
+      return;
+    }
+
+    final imageModeRet = engine.setImageProcessingMode(_imageProcessingMode);
+    if (imageModeRet != 0) {
+      setState(
+        () => _error = 'Set image processing failed: ${engine.lastError}',
+      );
       engine.dispose();
       return;
     }
@@ -330,6 +351,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
         unawaited(_showKeyboardDialog());
       case _PlayerMenuAction.switchResolution:
         unawaited(_showResolutionDialog());
+      case _PlayerMenuAction.switchImageProcessing:
+        unawaited(_showImageProcessingDialog());
     }
   }
 
@@ -421,6 +444,52 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     _keyboardFocusNode.requestFocus();
   }
 
+  Future<void> _showImageProcessingDialog() async {
+    final selected = await showDialog<VmrpImageProcessingMode>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: const Text('图像处理方式'),
+          children: [
+            for (final mode in VmrpImageProcessingMode.values)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(mode),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: mode == _imageProcessingMode
+                          ? const Icon(Icons.check, size: 20)
+                          : null,
+                    ),
+                    Text(mode.label),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || selected == null || selected == _imageProcessingMode) {
+      _keyboardFocusNode.requestFocus();
+      return;
+    }
+
+    final engine = _engine;
+    if (engine != null && engine.setImageProcessingMode(selected) != 0) {
+      setState(
+        () => _error = 'Set image processing failed: ${engine.lastError}',
+      );
+      _keyboardFocusNode.requestFocus();
+      return;
+    }
+
+    setState(() => _imageProcessingMode = selected);
+    engine?.requestScreenRefresh();
+    _keyboardFocusNode.requestFocus();
+  }
+
   Future<void> _vibrateVirtualKey() async {
     final now = DateTime.now();
     final last = _lastVirtualKeyHapticAt;
@@ -488,6 +557,16 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
                         Icon(Icons.aspect_ratio),
                         SizedBox(width: 12),
                         Text('切换分辨率'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _PlayerMenuAction.switchImageProcessing,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.image),
+                        const SizedBox(width: 12),
+                        Text('图像处理方式: ${_imageProcessingMode.label}'),
                       ],
                     ),
                   ),

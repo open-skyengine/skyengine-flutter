@@ -31,8 +31,17 @@ typedef VmrpApiTimerDart = int Function();
 typedef VmrpApiGetTimerIntervalC = Int32 Function();
 typedef VmrpApiGetTimerIntervalDart = int Function();
 
+typedef VmrpApiSetImageProcessingModeC = Int32 Function(Int32);
+typedef VmrpApiSetImageProcessingModeDart = int Function(int);
+
+typedef VmrpApiGetImageProcessingModeC = Int32 Function();
+typedef VmrpApiGetImageProcessingModeDart = int Function();
+
 typedef VmrpApiGetScreenBufferC = Pointer<Uint16> Function();
 typedef VmrpApiGetScreenBufferDart = Pointer<Uint16> Function();
+
+typedef VmrpApiGetScreenRgbaBufferC = Pointer<Uint8> Function();
+typedef VmrpApiGetScreenRgbaBufferDart = Pointer<Uint8> Function();
 
 typedef VmrpApiGetScreenDirtyC = Int32 Function();
 typedef VmrpApiGetScreenDirtyDart = int Function();
@@ -79,7 +88,10 @@ class VmrpBindings {
   late final VmrpApiEventDart event;
   late final VmrpApiTimerDart timer;
   late final VmrpApiGetTimerIntervalDart getTimerInterval;
+  late final VmrpApiSetImageProcessingModeDart setImageProcessingMode;
+  late final VmrpApiGetImageProcessingModeDart getImageProcessingMode;
   late final VmrpApiGetScreenBufferDart getScreenBuffer;
+  late final VmrpApiGetScreenRgbaBufferDart getScreenRgbaBuffer;
   late final VmrpApiGetScreenDirtyDart getScreenDirty;
   late final VmrpApiGetScreenWidthDart getScreenWidth;
   late final VmrpApiGetScreenHeightDart getScreenHeight;
@@ -129,10 +141,25 @@ class VmrpBindings {
         .lookupFunction<VmrpApiGetTimerIntervalC, VmrpApiGetTimerIntervalDart>(
           'vmrp_api_get_timer_interval',
         );
+    setImageProcessingMode = _lib
+        .lookupFunction<
+          VmrpApiSetImageProcessingModeC,
+          VmrpApiSetImageProcessingModeDart
+        >('vmrp_api_set_image_processing_mode');
+    getImageProcessingMode = _lib
+        .lookupFunction<
+          VmrpApiGetImageProcessingModeC,
+          VmrpApiGetImageProcessingModeDart
+        >('vmrp_api_get_image_processing_mode');
     getScreenBuffer = _lib
         .lookupFunction<VmrpApiGetScreenBufferC, VmrpApiGetScreenBufferDart>(
           'vmrp_api_get_screen_buffer',
         );
+    getScreenRgbaBuffer = _lib
+        .lookupFunction<
+          VmrpApiGetScreenRgbaBufferC,
+          VmrpApiGetScreenRgbaBufferDart
+        >('vmrp_api_get_screen_rgba_buffer');
     getScreenDirty = _lib
         .lookupFunction<VmrpApiGetScreenDirtyC, VmrpApiGetScreenDirtyDart>(
           'vmrp_api_get_screen_dirty',
