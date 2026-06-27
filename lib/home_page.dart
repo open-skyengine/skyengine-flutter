@@ -8,6 +8,7 @@ import 'android_app_update.dart';
 import 'android_mythroad_assets.dart';
 import 'android_mrp_open.dart';
 import 'app_store_api.dart';
+import 'debug_page.dart';
 import 'local_mrp_files.dart';
 
 class PickedMrpFile {
@@ -657,6 +658,7 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
+          const DebugPage(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -664,6 +666,7 @@ class _HomePageState extends State<HomePage> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.folder), label: '本地'),
           NavigationDestination(icon: Icon(Icons.storefront), label: '商店'),
+          NavigationDestination(icon: Icon(Icons.bug_report), label: '调试'),
         ],
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);

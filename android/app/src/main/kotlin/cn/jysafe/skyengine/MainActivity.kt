@@ -34,10 +34,12 @@ import java.util.zip.ZipInputStream
 class MainActivity : FlutterActivity() {
     private var mrpOpenChannel: MethodChannel? = null
     private var hardwareKeysChannel: MethodChannel? = null
+    private var debugKeysChannel: MethodChannel? = null
     private var initialMrpPath: String? = null
     private var pendingInstallApk: File? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var hardwareKeyCaptureEnabled = false
+    private var debugKeyCaptureEnabled = false
     private val pressedHardwareKeys = mutableMapOf<Int, Int>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -63,6 +65,20 @@ class MainActivity : FlutterActivity() {
                     if (!hardwareKeyCaptureEnabled) {
                         pressedHardwareKeys.clear()
                     }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        debugKeysChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DEBUG_KEYS_CHANNEL,
+        )
+        debugKeysChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                METHOD_SET_DEBUG_KEYS_ENABLED -> {
+                    debugKeyCaptureEnabled = call.arguments as? Boolean ?: false
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -252,6 +268,13 @@ class MainActivity : FlutterActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val vmrpKeyCode = vmrpKeyCodeForAndroidKey(event)
+        if (debugKeyCaptureEnabled) {
+            debugKeysChannel?.invokeMethod(
+                METHOD_DEBUG_KEY_EVENT,
+                debugKeyEventMap(event, vmrpKeyCode),
+            )
+            return true
+        }
         if (hardwareKeyCaptureEnabled && vmrpKeyCode != null) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
@@ -277,7 +300,10 @@ class MainActivity : FlutterActivity() {
         mrpOpenChannel = null
         hardwareKeysChannel?.setMethodCallHandler(null)
         hardwareKeysChannel = null
+        debugKeysChannel?.setMethodCallHandler(null)
+        debugKeysChannel = null
         hardwareKeyCaptureEnabled = false
+        debugKeyCaptureEnabled = false
         pressedHardwareKeys.clear()
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -771,8 +797,74 @@ class MainActivity : FlutterActivity() {
             KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> VMRP_KEY_9
             KeyEvent.KEYCODE_STAR, KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> VMRP_KEY_STAR
             KeyEvent.KEYCODE_POUND -> VMRP_KEY_POUND
-            KeyEvent.KEYCODE_SOFT_LEFT -> VMRP_KEY_SOFT_LEFT
-            KeyEvent.KEYCODE_SOFT_RIGHT -> VMRP_KEY_SOFT_RIGHT
+            KeyEvent.KEYCODE_SOFT_LEFT, KeyEvent.KEYCODE_MENU -> VMRP_KEY_SOFT_LEFT
+            KeyEvent.KEYCODE_SOFT_RIGHT, KeyEvent.KEYCODE_BACK -> VMRP_KEY_SOFT_RIGHT
+            else -> null
+        }
+    }
+
+    private fun debugKeyEventMap(event: KeyEvent, vmrpKeyCode: Int?): Map<String, Any?> {
+        return mapOf(
+            "action" to event.action,
+            "actionName" to keyActionName(event.action),
+            "keyCode" to event.keyCode,
+            "keyCodeName" to KeyEvent.keyCodeToString(event.keyCode),
+            "scanCode" to event.scanCode,
+            "repeatCount" to event.repeatCount,
+            "metaState" to event.metaState,
+            "metaStateName" to metaStateName(event.metaState),
+            "unicodeChar" to event.unicodeChar,
+            "deviceId" to event.deviceId,
+            "source" to event.source,
+            "flags" to event.flags,
+            "vmrpKeyCode" to vmrpKeyCode,
+            "vmrpKeyName" to vmrpKeyName(vmrpKeyCode),
+        )
+    }
+
+    private fun keyActionName(action: Int): String {
+        return when (action) {
+            KeyEvent.ACTION_DOWN -> "down"
+            KeyEvent.ACTION_UP -> "up"
+            else -> "unknown"
+        }
+    }
+
+    private fun metaStateName(metaState: Int): String {
+        if (metaState == 0) {
+            return "none"
+        }
+        val names = mutableListOf<String>()
+        if (metaState and KeyEvent.META_SHIFT_ON != 0) names.add("shift")
+        if (metaState and KeyEvent.META_ALT_ON != 0) names.add("alt")
+        if (metaState and KeyEvent.META_CTRL_ON != 0) names.add("ctrl")
+        if (metaState and KeyEvent.META_META_ON != 0) names.add("meta")
+        if (metaState and KeyEvent.META_SYM_ON != 0) names.add("sym")
+        if (metaState and KeyEvent.META_CAPS_LOCK_ON != 0) names.add("capsLock")
+        if (metaState and KeyEvent.META_NUM_LOCK_ON != 0) names.add("numLock")
+        if (metaState and KeyEvent.META_SCROLL_LOCK_ON != 0) names.add("scrollLock")
+        if (names.isEmpty()) {
+            return metaState.toString()
+        }
+        return names.joinToString("+")
+    }
+
+    private fun vmrpKeyName(keyCode: Int?): String? {
+        return when (keyCode) {
+            VMRP_KEY_0 -> "0"
+            VMRP_KEY_1 -> "1"
+            VMRP_KEY_2 -> "2"
+            VMRP_KEY_3 -> "3"
+            VMRP_KEY_4 -> "4"
+            VMRP_KEY_5 -> "5"
+            VMRP_KEY_6 -> "6"
+            VMRP_KEY_7 -> "7"
+            VMRP_KEY_8 -> "8"
+            VMRP_KEY_9 -> "9"
+            VMRP_KEY_STAR -> "*"
+            VMRP_KEY_POUND -> "#"
+            VMRP_KEY_SOFT_LEFT -> "softLeft"
+            VMRP_KEY_SOFT_RIGHT -> "softRight"
             else -> null
         }
     }
@@ -785,6 +877,9 @@ class MainActivity : FlutterActivity() {
         const val METHOD_SET_HARDWARE_KEYS_ENABLED = "setEnabled"
         const val METHOD_HARDWARE_KEY_DOWN = "keyDown"
         const val METHOD_HARDWARE_KEY_UP = "keyUp"
+        const val DEBUG_KEYS_CHANNEL = "skyengine/debug_keys"
+        const val METHOD_SET_DEBUG_KEYS_ENABLED = "setEnabled"
+        const val METHOD_DEBUG_KEY_EVENT = "keyEvent"
         const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
