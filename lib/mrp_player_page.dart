@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'local_mrp_files.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
@@ -34,6 +35,20 @@ String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
   return mrpPath;
 }
 
+String mrpPlayerTitleForPath(String mrpPath, {String? title}) {
+  final explicitTitle = title?.trim();
+  if (explicitTitle != null && explicitTitle.isNotEmpty) {
+    return explicitTitle;
+  }
+
+  final localFiles = LocalMrpFiles();
+  final metadata = localFiles.readMetadata(mrpPath);
+  if (metadata.name.isNotEmpty) {
+    return metadata.name;
+  }
+  return fileNameWithoutExtension(localFiles.fileName(mrpPath));
+}
+
 enum _KeypadMode { directional, numeric, none }
 
 extension on _KeypadMode {
@@ -53,6 +68,7 @@ extension on VmrpImageProcessingMode {
 
 class MrpPlayerPage extends StatefulWidget {
   final String mrpPath;
+  final String? title;
   final String? dnsMap;
   final int screenWidth;
   final int screenHeight;
@@ -60,6 +76,7 @@ class MrpPlayerPage extends StatefulWidget {
   const MrpPlayerPage({
     super.key,
     required this.mrpPath,
+    this.title,
     this.dnsMap,
     this.screenWidth = 240,
     this.screenHeight = 320,
@@ -123,6 +140,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   bool _disposedEngine = false;
   bool _isFullscreen = false;
   late _ScreenResolution _currentResolution;
+  late final String _title;
   VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
 
@@ -143,12 +161,17 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       widget.screenWidth,
       widget.screenHeight,
     );
+    _title = _resolveTitle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _keyboardFocusNode.requestFocus();
       }
     });
     Future.delayed(Duration.zero, _startEngine);
+  }
+
+  String _resolveTitle() {
+    return mrpPlayerTitleForPath(widget.mrpPath, title: widget.title);
   }
 
   void _startEngine() {
@@ -769,7 +792,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text('VMRP'),
+      title: Text(_title),
       leading: BackButton(onPressed: _handleBack),
       actions: [
         PopupMenuButton<_PlayerMenuAction>(
