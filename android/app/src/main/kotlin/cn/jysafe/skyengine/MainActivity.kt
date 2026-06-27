@@ -696,6 +696,8 @@ class MainActivity : FlutterActivity() {
             KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_NUMPAD_9 -> VMRP_KEY_9
             KeyEvent.KEYCODE_STAR, KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> VMRP_KEY_STAR
             KeyEvent.KEYCODE_POUND -> VMRP_KEY_POUND
+            KeyEvent.KEYCODE_SOFT_LEFT -> VMRP_KEY_SOFT_LEFT
+            KeyEvent.KEYCODE_SOFT_RIGHT -> VMRP_KEY_SOFT_RIGHT
             else -> null
         }
     }
@@ -755,5 +757,7 @@ class MainActivity : FlutterActivity() {
         const val VMRP_KEY_9 = 9
         const val VMRP_KEY_STAR = 10
         const val VMRP_KEY_POUND = 11
+        const val VMRP_KEY_SOFT_LEFT = 17
+        const val VMRP_KEY_SOFT_RIGHT = 18
     }
 }
