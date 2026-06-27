@@ -263,17 +263,17 @@ class _HomePageState extends State<HomePage> {
     if (workDir == null || _downloadingUpdate) {
       return;
     }
-    setState(() => _downloadingUpdate = true);
     Future<void> pendingProgressNotification = Future<void>.value();
     var canShowDownloadNotification = false;
+    var downloadStarted = false;
     try {
-      canShowDownloadNotification = await _androidAppUpdate
-          .ensureDownloadNotificationPermission();
-      if (!canShowDownloadNotification && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('通知权限未开启，下载进度不会显示在通知栏')));
+      canShowDownloadNotification = await _prepareDownloadNotification();
+      if (!mounted) {
+        return;
       }
+
+      setState(() => _downloadingUpdate = true);
+      downloadStarted = true;
 
       final updatesDir = Directory(
         '${workDir.path}${Platform.pathSeparator}updates',
@@ -362,7 +362,7 @@ class _HomePageState extends State<HomePage> {
         unawaited(_showAppUpdateDialog(version));
       }
     } finally {
-      if (mounted) {
+      if (downloadStarted && mounted) {
         setState(() => _downloadingUpdate = false);
       }
     }
@@ -374,6 +374,93 @@ class _HomePageState extends State<HomePage> {
         .map((host) => '${host.domain}->${host.ip}')
         .toList();
     return entries.isEmpty ? null : entries.join(';');
+  }
+
+  Future<bool> _prepareDownloadNotification() async {
+    var status = await _androidAppUpdate.ensureDownloadNotificationPermission();
+    if (status.canShow) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+
+    final openSettings = await _showDownloadNotificationPermissionDialog(
+      status,
+    );
+    if (openSettings != true || !mounted) {
+      return false;
+    }
+
+    final resumed = _waitForNextAppResume();
+    await _androidAppUpdate.openDownloadNotificationSettings();
+    if (!mounted) {
+      return false;
+    }
+
+    await resumed;
+    if (!mounted) {
+      return false;
+    }
+
+    status = await _androidAppUpdate.ensureDownloadNotificationPermission();
+    if (status.canShow) {
+      return true;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_downloadNotificationMessage(status))),
+      );
+    }
+    return false;
+  }
+
+  Future<bool?> _showDownloadNotificationPermissionDialog(
+    DownloadNotificationPermissionStatus status,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('开启通知'),
+          content: Text(_downloadNotificationMessage(status)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: status.canOpenSettings
+                  ? () => Navigator.of(context).pop(true)
+                  : null,
+              child: const Text('去开启'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _waitForNextAppResume() {
+    final completer = Completer<void>();
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+        listener.dispose();
+      },
+    );
+    return completer.future;
+  }
+
+  String _downloadNotificationMessage(
+    DownloadNotificationPermissionStatus status,
+  ) {
+    return status.message.isEmpty ? '开启通知后，下载进度会显示在通知栏' : status.message;
   }
 
   @override

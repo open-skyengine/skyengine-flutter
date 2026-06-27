@@ -3,6 +3,7 @@ package cn.jysafe.skyengine
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.res.AssetManager
 import android.content.Context
 import android.content.Intent
@@ -160,6 +161,18 @@ class MainActivity : FlutterActivity() {
                     METHOD_ENSURE_DOWNLOAD_NOTIFICATION_PERMISSION -> {
                         requestDownloadNotificationPermission(result)
                     }
+                    METHOD_OPEN_DOWNLOAD_NOTIFICATION_SETTINGS -> {
+                        try {
+                            openUpdateNotificationSettings()
+                            result.success(null)
+                        } catch (error: Exception) {
+                            result.error(
+                                ERROR_APP_UPDATE_FAILED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
+                        }
+                    }
                     METHOD_SHOW_DOWNLOAD_PROGRESS -> {
                         val downloadedBytes = call.argument<Number>(ARG_DOWNLOADED_BYTES)?.toLong()
                         val totalBytes = call.argument<Number>(ARG_TOTAL_BYTES)?.toLong()
@@ -233,7 +246,7 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        pendingNotificationPermissionResult?.success(canShowUpdateDownloadNotification())
+        pendingNotificationPermissionResult?.success(downloadNotificationStatus())
         pendingNotificationPermissionResult = null
     }
 
@@ -494,22 +507,84 @@ class MainActivity : FlutterActivity() {
 
     private fun requestDownloadNotificationPermission(result: MethodChannel.Result) {
         if (canShowUpdateDownloadNotification()) {
-            result.success(true)
+            result.success(downloadNotificationStatus())
             return
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             hasNotificationPermission()
         ) {
-            result.success(false)
+            result.success(downloadNotificationStatus())
             return
         }
 
-        pendingNotificationPermissionResult?.success(false)
+        pendingNotificationPermissionResult?.success(downloadNotificationStatus())
         pendingNotificationPermissionResult = result
         ActivityCompat.requestPermissions(
             this,
             arrayOf(Manifest.permission.POST_NOTIFICATIONS),
             NOTIFICATION_PERMISSION_REQUEST_CODE,
+        )
+    }
+
+    private fun downloadNotificationStatus(): Map<String, Any> {
+        if (canShowUpdateDownloadNotification()) {
+            return mapOf(
+                "canShow" to true,
+                "canOpenSettings" to false,
+                "message" to "",
+            )
+        }
+
+        val message = when {
+            !hasNotificationPermission() ->
+                "通知权限未开启，下载进度不会显示在通知栏"
+            !NotificationManagerCompat.from(this).areNotificationsEnabled() ->
+                "系统通知已关闭，下载进度不会显示在通知栏"
+            isUpdateNotificationChannelBlocked() ->
+                "应用更新通知已关闭，下载进度不会显示在通知栏"
+            else ->
+                "通知不可用，下载进度不会显示在通知栏"
+        }
+
+        return mapOf(
+            "canShow" to false,
+            "canOpenSettings" to true,
+            "message" to message,
+        )
+    }
+
+    private fun openUpdateNotificationSettings() {
+        val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            notificationsEnabled &&
+            isUpdateNotificationChannelBlocked()
+        ) {
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, UPDATE_NOTIFICATION_CHANNEL_ID)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            appDetailsSettingsIntent()
+        }
+        startSettingsActivity(intent)
+    }
+
+    private fun startSettingsActivity(intent: Intent) {
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (error: ActivityNotFoundException) {
+            startActivity(
+                appDetailsSettingsIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+
+    private fun appDetailsSettingsIntent(): Intent {
+        return Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName"),
         )
     }
 
@@ -715,6 +790,8 @@ class MainActivity : FlutterActivity() {
         const val METHOD_INSTALL_APK = "installApk"
         const val METHOD_ENSURE_DOWNLOAD_NOTIFICATION_PERMISSION =
             "ensureDownloadNotificationPermission"
+        const val METHOD_OPEN_DOWNLOAD_NOTIFICATION_SETTINGS =
+            "openDownloadNotificationSettings"
         const val METHOD_SHOW_DOWNLOAD_PROGRESS = "showDownloadProgress"
         const val METHOD_SHOW_DOWNLOAD_COMPLETE = "showDownloadComplete"
         const val METHOD_SHOW_DOWNLOAD_FAILED = "showDownloadFailed"

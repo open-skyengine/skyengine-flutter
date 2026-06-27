@@ -2,6 +2,36 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+class DownloadNotificationPermissionStatus {
+  final bool canShow;
+  final bool canOpenSettings;
+  final String message;
+
+  const DownloadNotificationPermissionStatus({
+    required this.canShow,
+    required this.canOpenSettings,
+    required this.message,
+  });
+
+  const DownloadNotificationPermissionStatus.unavailable()
+    : canShow = false,
+      canOpenSettings = false,
+      message = '';
+
+  factory DownloadNotificationPermissionStatus.fromJson(
+    Map<dynamic, dynamic>? json,
+  ) {
+    if (json == null) {
+      return const DownloadNotificationPermissionStatus.unavailable();
+    }
+    return DownloadNotificationPermissionStatus(
+      canShow: json['canShow'] == true,
+      canOpenSettings: json['canOpenSettings'] == true,
+      message: json['message'] is String ? json['message'] as String : '',
+    );
+  }
+}
+
 class AndroidAppUpdate {
   static const MethodChannel _channel = MethodChannel('skyengine/app_update');
 
@@ -22,14 +52,22 @@ class AndroidAppUpdate {
     await _channel.invokeMethod<void>('installApk', {'path': path});
   }
 
-  Future<bool> ensureDownloadNotificationPermission() async {
+  Future<DownloadNotificationPermissionStatus>
+  ensureDownloadNotificationPermission() async {
     if (!Platform.isAndroid) {
-      return false;
+      return const DownloadNotificationPermissionStatus.unavailable();
     }
-    final granted = await _channel.invokeMethod<bool>(
+    final status = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'ensureDownloadNotificationPermission',
     );
-    return granted ?? false;
+    return DownloadNotificationPermissionStatus.fromJson(status);
+  }
+
+  Future<void> openDownloadNotificationSettings() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    await _channel.invokeMethod<void>('openDownloadNotificationSettings');
   }
 
   Future<void> showDownloadProgress({
