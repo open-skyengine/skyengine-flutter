@@ -70,6 +70,9 @@ typedef VmrpApiAudioStopDart = void Function();
 typedef VmrpApiIsEditActiveC = Int32 Function();
 typedef VmrpApiIsEditActiveDart = int Function();
 
+typedef VmrpApiGetEditTextC = Pointer<Utf8> Function();
+typedef VmrpApiGetEditTextDart = Pointer<Utf8> Function();
+
 typedef VmrpApiSetEditTextC = Int32 Function(Pointer<Utf8>);
 typedef VmrpApiSetEditTextDart = int Function(Pointer<Utf8>);
 
@@ -101,6 +104,7 @@ class VmrpBindings {
   late final VmrpApiAudioRenderS16leDart audioRenderS16le;
   late final VmrpApiAudioStopDart audioStop;
   late final VmrpApiIsEditActiveDart isEditActive;
+  late final VmrpApiGetEditTextDart getEditText;
   late final VmrpApiSetEditTextDart setEditText;
   late final VmrpApiCancelEditDart cancelEdit;
 
@@ -194,6 +198,10 @@ class VmrpBindings {
     isEditActive = _lib
         .lookupFunction<VmrpApiIsEditActiveC, VmrpApiIsEditActiveDart>(
           'vmrp_api_is_edit_active',
+        );
+    getEditText = _lib
+        .lookupFunction<VmrpApiGetEditTextC, VmrpApiGetEditTextDart>(
+          'vmrp_api_get_edit_text',
         );
     setEditText = _lib
         .lookupFunction<VmrpApiSetEditTextC, VmrpApiSetEditTextDart>(

@@ -112,6 +112,58 @@ enum _PlayerMenuAction {
   switchImageProcessing,
 }
 
+class _EditTextDialog extends StatefulWidget {
+  final String initialText;
+
+  const _EditTextDialog({required this.initialText});
+
+  @override
+  State<_EditTextDialog> createState() => _EditTextDialogState();
+}
+
+class _EditTextDialogState extends State<_EditTextDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('输入'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: TextInputType.multiline,
+        minLines: 3,
+        maxLines: 8,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('确定'),
+        ),
+      ],
+    );
+  }
+}
+
 class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const MethodChannel _hapticsChannel = MethodChannel(
     'skyengine/haptics',
@@ -464,23 +516,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     }
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) {
-        final controller = TextEditingController();
-        return AlertDialog(
-          title: const Text('输入'),
-          content: TextField(controller: controller, autofocus: true),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('确定'),
-            ),
-          ],
-        );
-      },
+      builder: (_) =>
+          _EditTextDialog(initialText: _engine?.getEditText() ?? ''),
     );
 
     if (mounted && !_disposedEngine) {

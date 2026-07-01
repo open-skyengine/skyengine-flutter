@@ -255,6 +255,12 @@ class VmrpEngine {
     return _screenRgbaView;
   }
 
+  String getEditText() {
+    if (_bindings == null) return '';
+    final text = _bindings!.getEditText();
+    return text == nullptr ? '' : text.toDartString();
+  }
+
   void confirmEdit(String text) {
     if (_bindings == null) return;
     final pText = text.toNativeUtf8();
