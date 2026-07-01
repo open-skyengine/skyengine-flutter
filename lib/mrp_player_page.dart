@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'local_mrp_files.dart';
+import 'mrp_resolution.dart';
 import 'vmrp_engine.dart';
 import 'vmrp_widget.dart';
 
@@ -86,25 +87,6 @@ class MrpPlayerPage extends StatefulWidget {
   State<MrpPlayerPage> createState() => _MrpPlayerPageState();
 }
 
-class _ScreenResolution {
-  final int width;
-  final int height;
-
-  const _ScreenResolution(this.width, this.height);
-
-  String get label => '${width}x$height';
-
-  @override
-  bool operator ==(Object other) {
-    return other is _ScreenResolution &&
-        other.width == width &&
-        other.height == height;
-  }
-
-  @override
-  int get hashCode => Object.hash(width, height);
-}
-
 enum _PlayerMenuAction {
   toggleFullscreen,
   switchKeyboard,
@@ -177,12 +159,6 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const double _keypadRowGap = 10;
   static const double _keypadButtonWidth = 84;
   static const double _keypadButtonHeight = 44;
-  static const List<_ScreenResolution> _commonResolutions = [
-    _ScreenResolution(240, 320),
-    _ScreenResolution(176, 220),
-    _ScreenResolution(128, 160),
-  ];
-
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
   final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
@@ -191,7 +167,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   bool _exiting = false;
   bool _disposedEngine = false;
   bool _isFullscreen = false;
-  late _ScreenResolution _currentResolution;
+  late MrpResolution _currentResolution;
   late final String _title;
   VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
@@ -209,10 +185,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     super.initState();
     _hardwareKeysChannel.setMethodCallHandler(_handleHardwareKeyCall);
     unawaited(_setHardwareKeyCapture(true));
-    _currentResolution = _ScreenResolution(
-      widget.screenWidth,
-      widget.screenHeight,
-    );
+    _currentResolution = MrpResolution(widget.screenWidth, widget.screenHeight);
     _title = _resolveTitle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -665,15 +638,15 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     _keyboardFocusNode.requestFocus();
   }
 
-  List<_ScreenResolution> get _resolutionOptions {
-    if (_commonResolutions.contains(_currentResolution)) {
-      return _commonResolutions;
+  List<MrpResolution> get _resolutionOptions {
+    if (kCommonMrpResolutions.contains(_currentResolution)) {
+      return kCommonMrpResolutions;
     }
-    return [_currentResolution, ..._commonResolutions];
+    return [_currentResolution, ...kCommonMrpResolutions];
   }
 
   Future<void> _showResolutionDialog() async {
-    final selected = await showDialog<_ScreenResolution>(
+    final selected = await showDialog<MrpResolution>(
       context: context,
       builder: (ctx) {
         return SimpleDialog(
@@ -706,7 +679,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     _restartEngineWithResolution(selected);
   }
 
-  void _restartEngineWithResolution(_ScreenResolution resolution) {
+  void _restartEngineWithResolution(MrpResolution resolution) {
     // vmrp_api_init() owns the screen buffer size, so changing resolution must
     // recreate the engine before start() instead of only resizing the widget.
     _disposeCurrentEngineForRestart();

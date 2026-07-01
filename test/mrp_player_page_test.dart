@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gbk_codec/gbk_codec.dart';
+import 'package:skyengine/mrp_resolution.dart';
 import 'package:skyengine/mrp_player_page.dart';
 
 void main() {
@@ -37,6 +38,20 @@ void main() {
     } finally {
       await tempDir.delete(recursive: true);
     }
+  });
+
+  test('common MRP resolutions include supported sizes', () {
+    expect(
+      kCommonMrpResolutions.map((resolution) => resolution.label),
+      containsAll([
+        '128x160',
+        '176x220',
+        '240x400',
+        '320x240',
+        '320x480',
+        '480x800',
+      ]),
+    );
   });
 }
 
