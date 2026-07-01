@@ -35,7 +35,7 @@ class MainActivity : FlutterActivity() {
     private var mrpOpenChannel: MethodChannel? = null
     private var hardwareKeysChannel: MethodChannel? = null
     private var debugKeysChannel: MethodChannel? = null
-    private var initialMrpPath: String? = null
+    private var initialMrpRequest: ImportedMrp? = null
     private var pendingInstallApk: File? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var hardwareKeyCaptureEnabled = false
@@ -45,11 +45,11 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        initialMrpPath = initialMrpPath ?: importMrpFromIntent(intent)
+        initialMrpRequest = initialMrpRequest ?: importMrpFromIntent(intent)
         mrpOpenChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MRP_OPEN_CHANNEL)
         mrpOpenChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
-                METHOD_GET_INITIAL_MRP -> result.success(initialMrpPath)
+                METHOD_GET_INITIAL_MRP -> result.success(initialMrpRequest?.toFlutterMap())
                 else -> result.notImplemented()
             }
         }
@@ -237,8 +237,8 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
-        val mrpPath = importMrpFromIntent(intent) ?: return
-        mrpOpenChannel?.invokeMethod(METHOD_OPEN_MRP, mrpPath)
+        val mrp = importMrpFromIntent(intent) ?: return
+        mrpOpenChannel?.invokeMethod(METHOD_OPEN_MRP, mrp.toFlutterMap())
     }
 
     override fun onResume() {
@@ -308,18 +308,40 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
-    private fun importMrpFromIntent(intent: Intent?): String? {
+    private data class ImportedMrp(
+        val path: String,
+        val resolution: String?,
+    ) {
+        fun toFlutterMap(): Map<String, Any?> {
+            return mapOf(
+                ARG_MRP_PATH to path,
+                ARG_RESOLUTION to resolution,
+            )
+        }
+    }
+
+    private fun importMrpFromIntent(intent: Intent?): ImportedMrp? {
         if (intent?.action != Intent.ACTION_VIEW) {
             return null
         }
 
         val uri = intent.data ?: return null
         return try {
-            importMrpUri(uri)
+            val path = importMrpUri(uri) ?: return null
+            ImportedMrp(path, resolutionFromIntent(intent, uri))
         } catch (error: Exception) {
             Log.w(TAG, "Failed to import MRP from $uri", error)
             null
         }
+    }
+
+    private fun resolutionFromIntent(intent: Intent, uri: Uri): String? {
+        val value = intent.getStringExtra(ARG_RESOLUTION)
+            ?: uri.getQueryParameter(ARG_RESOLUTION)
+            ?: return null
+        return value
+            .trim()
+            .takeIf { RESOLUTION_PATTERN.matches(it) }
     }
 
     private fun importMrpUri(uri: Uri): String? {
@@ -903,6 +925,8 @@ class MainActivity : FlutterActivity() {
         const val MRP_OPEN_CHANNEL = "skyengine/mrp_open"
         const val METHOD_GET_INITIAL_MRP = "getInitialMrp"
         const val METHOD_OPEN_MRP = "openMrp"
+        const val ARG_MRP_PATH = "path"
+        const val ARG_RESOLUTION = "resolution"
         const val MYTHROAD_ASSETS_CHANNEL = "skyengine/mythroad_assets"
         const val METHOD_ENSURE_SYSTEM = "ensureSystem"
         const val ARG_MYTHROAD_DIR = "mythroadDir"
@@ -911,6 +935,7 @@ class MainActivity : FlutterActivity() {
         const val MYTHROAD_DIR_NAME = "mythroad"
         const val MRP_EXTENSION = ".mrp"
         const val DEFAULT_MRP_FILE_NAME = "imported.mrp"
+        val RESOLUTION_PATTERN = Regex("""^\d{2,5}\s*[xX]\s*\d{2,5}$""")
         const val ERROR_BAD_ARGUMENTS = "BAD_ARGUMENTS"
         const val ERROR_MYTHROAD_SYSTEM_FAILED = "MYTHROAD_SYSTEM_FAILED"
         const val VIRTUAL_KEY_VIBRATION_MS = 18L

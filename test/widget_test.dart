@@ -1,14 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skyengine/android_mrp_open.dart';
 import 'package:skyengine/home_page.dart';
 import 'package:skyengine/mrp_player_page.dart';
 
 void main() {
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
-    final tempDir = await Directory.systemTemp.createTemp(
-      'skyengine_home_page_test_',
+    final tempDir = await tester.runAsync(
+      () => Directory.systemTemp.createTemp('skyengine_home_page_test_'),
     );
+    if (tempDir == null) {
+      fail('Failed to create temp directory');
+    }
 
     try {
       await tester.pumpWidget(
@@ -19,13 +23,16 @@ void main() {
             appStoreBuilder: _buildTestAppStore,
             playerBuilder: _buildTestPlayer,
             initialMrpProvider: () async => null,
-            openMrpStreamProvider: () => const Stream.empty(),
+            openMrpStreamProvider: () => const Stream<MrpOpenRequest>.empty(),
             enableStartupRemoteConfig: false,
             enableStartupUpdateCheck: false,
           ),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
 
       expect(find.text('SkyEngine'), findsOneWidget);
       expect(find.text('本地'), findsOneWidget);
@@ -37,7 +44,7 @@ void main() {
       expect(find.text('搜索应用'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tempDir.delete(recursive: true);
+      await tester.runAsync(() => tempDir.delete(recursive: true));
     }
   });
 
@@ -119,12 +126,12 @@ void main() {
 
 Widget _buildTestAppStore(
   String? mrpDir,
-  ValueChanged<String> onRunMrp,
+  AppStoreRunMrp onRunMrp,
   Future<void> Function() onDownloaded,
 ) {
   return const Center(child: Text('搜索应用'));
 }
 
-Widget _buildTestPlayer(String mrpPath, String? dnsMap) {
-  return Scaffold(body: Text(mrpPath));
+Widget _buildTestPlayer(MrpOpenRequest request, String? dnsMap) {
+  return Scaffold(body: Text(request.path));
 }

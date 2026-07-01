@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_store_api.dart';
+import 'mrp_resolution.dart';
+
+typedef RunMrpCallback = void Function(String path, {String? resolution});
 
 class AppStorePage extends StatefulWidget {
   final String? mrpDir;
-  final ValueChanged<String> onRunMrp;
+  final RunMrpCallback onRunMrp;
   final Future<void> Function() onDownloaded;
 
   const AppStorePage({
@@ -37,6 +40,7 @@ class _AppStorePageState extends State<AppStorePage> {
   int _nextPage = 1;
   String? _error;
   String _activeQuery = '';
+  MrpResolution _selectedResolution = kDefaultMrpResolution;
   DateTime? _lastBottomPromptAt;
 
   @override
@@ -122,9 +126,18 @@ class _AppStorePageState extends State<AppStorePage> {
 
   Future<PagedResult<AppStoreApp>> _fetchPage(int page, String query) {
     if (query.isEmpty) {
-      return _client.fetchApps(page: page, pageSize: _pageSize);
+      return _client.fetchApps(
+        page: page,
+        pageSize: _pageSize,
+        resolution: _selectedResolution.label,
+      );
     }
-    return _client.searchApps(query: query, page: page, pageSize: _pageSize);
+    return _client.searchApps(
+      query: query,
+      page: page,
+      pageSize: _pageSize,
+      resolution: _selectedResolution.label,
+    );
   }
 
   void _onScroll() {
@@ -192,6 +205,7 @@ class _AppStorePageState extends State<AppStorePage> {
       final downloaded = await _client.downloadLatestVersion(
         app: app,
         destinationDir: Directory(mrpDir),
+        resolution: _selectedResolution.label,
       );
       await widget.onDownloaded();
       if (!mounted) {
@@ -206,7 +220,10 @@ class _AppStorePageState extends State<AppStorePage> {
           ),
         ),
       );
-      widget.onRunMrp(downloaded.file.path);
+      widget.onRunMrp(
+        downloaded.file.path,
+        resolution: _selectedResolution.label,
+      );
     } catch (e) {
       if (!mounted) {
         return;
@@ -242,29 +259,84 @@ class _AppStorePageState extends State<AppStorePage> {
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
-        child: SearchBar(
-          controller: _searchController,
-          hintText: '搜索应用',
-          leading: const Icon(Icons.search),
-          trailing: [
-            if (_searchController.text.isNotEmpty)
-              IconButton(
-                tooltip: '清空',
-                onPressed: () {
-                  _searchController.clear();
-                  unawaited(_reload());
+        child: Row(
+          children: [
+            Expanded(
+              child: SearchBar(
+                controller: _searchController,
+                hintText: '搜索应用',
+                leading: const Icon(Icons.search),
+                trailing: [
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
+                      tooltip: '清空',
+                      onPressed: () {
+                        _searchController.clear();
+                        unawaited(_reload());
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
+                ],
+                onChanged: (value) {
+                  setState(() {});
+                  _onSearchChanged(value);
                 },
-                icon: const Icon(Icons.close),
+                onSubmitted: (_) => unawaited(_reload()),
               ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<MrpResolution>(
+              tooltip: '分辨率',
+              initialValue: _selectedResolution,
+              onSelected: _selectResolution,
+              itemBuilder: (context) {
+                return [
+                  for (final resolution in kCommonMrpResolutions)
+                    PopupMenuItem(
+                      value: resolution,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 28,
+                            child: resolution == _selectedResolution
+                                ? const Icon(Icons.check, size: 20)
+                                : null,
+                          ),
+                          Text(resolution.label),
+                        ],
+                      ),
+                    ),
+                ];
+              },
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.aspect_ratio),
+                    const SizedBox(width: 6),
+                    Text(_selectedResolution.label),
+                  ],
+                ),
+              ),
+            ),
           ],
-          onChanged: (value) {
-            setState(() {});
-            _onSearchChanged(value);
-          },
-          onSubmitted: (_) => unawaited(_reload()),
         ),
       ),
     );
+  }
+
+  void _selectResolution(MrpResolution resolution) {
+    if (resolution == _selectedResolution) {
+      return;
+    }
+    setState(() => _selectedResolution = resolution);
+    unawaited(_reload());
   }
 
   Widget _buildBody() {

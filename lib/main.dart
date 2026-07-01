@@ -32,8 +32,12 @@ class MyApp extends StatelessWidget {
             onDownloaded: onDownloaded,
           );
         },
-        playerBuilder: (mrpPath, dnsMap) =>
-            MrpPlayerPage(mrpPath: mrpPath, dnsMap: dnsMap),
+        playerBuilder: (request, dnsMap) => MrpPlayerPage(
+          mrpPath: request.path,
+          dnsMap: dnsMap,
+          screenWidth: request.screenWidth ?? 240,
+          screenHeight: request.screenHeight ?? 320,
+        ),
       ),
     );
   }

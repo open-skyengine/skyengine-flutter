@@ -11,6 +11,8 @@ import 'app_store_api.dart';
 import 'debug_page.dart';
 import 'local_mrp_files.dart';
 
+typedef AppStoreRunMrp = void Function(String path, {String? resolution});
+
 class PickedMrpFile {
   final String path;
   final String name;
@@ -20,15 +22,16 @@ class PickedMrpFile {
 
 typedef DocumentsDirectoryProvider = Future<Directory> Function();
 typedef MrpFilePicker = Future<PickedMrpFile?> Function();
-typedef InitialMrpProvider = Future<String?> Function();
-typedef OpenMrpStreamProvider = Stream<String> Function();
+typedef InitialMrpProvider = Future<MrpOpenRequest?> Function();
+typedef OpenMrpStreamProvider = Stream<MrpOpenRequest> Function();
 typedef AppStoreBuilder =
     Widget Function(
       String? mrpDir,
-      ValueChanged<String> onRunMrp,
+      AppStoreRunMrp onRunMrp,
       Future<void> Function() onDownloaded,
     );
-typedef MrpPlayerBuilder = Widget Function(String mrpPath, String? dnsMap);
+typedef MrpPlayerBuilder =
+    Widget Function(MrpOpenRequest request, String? dnsMap);
 
 Directory mrpDirectoryForWorkDir(Directory workDir) {
   return Directory('${workDir.path}${Platform.pathSeparator}mythroad');
@@ -60,12 +63,12 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-Future<String?> _defaultInitialMrpProvider() {
-  return const AndroidMrpOpen().getInitialMrp();
+Future<MrpOpenRequest?> _defaultInitialMrpProvider() {
+  return const AndroidMrpOpen().getInitialMrpRequest();
 }
 
-Stream<String> _defaultOpenMrpStreamProvider() {
-  return const AndroidMrpOpen().openMrps();
+Stream<MrpOpenRequest> _defaultOpenMrpStreamProvider() {
+  return const AndroidMrpOpen().openMrpRequests();
 }
 
 enum _MrpRemovalAction { removeFromList, deleteFile }
@@ -87,7 +90,7 @@ class _HomePageState extends State<HomePage> {
   bool _downloadingUpdate = false;
   bool _updatePromptShown = false;
   bool _openedInitialMrp = false;
-  StreamSubscription<String>? _mrpOpenSubscription;
+  StreamSubscription<MrpOpenRequest>? _mrpOpenSubscription;
 
   @override
   void initState() {
@@ -147,18 +150,18 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     _openedInitialMrp = true;
-    final path = await widget.initialMrpProvider();
-    if (path != null && path.isNotEmpty) {
-      await _openImportedMrp(path);
+    final request = await widget.initialMrpProvider();
+    if (request != null && request.path.isNotEmpty) {
+      await _openImportedMrp(request);
     }
   }
 
-  Future<void> _openImportedMrp(String path) async {
+  Future<void> _openImportedMrp(MrpOpenRequest request) async {
     await _refreshFileList();
     if (!mounted) {
       return;
     }
-    _runMrp(path);
+    _runMrpRequest(request);
   }
 
   Future<void> _pickAndCopyMrp() async {
@@ -173,9 +176,13 @@ class _HomePageState extends State<HomePage> {
     await _refreshFileList();
   }
 
-  void _runMrp(String path) {
+  void _runMrp(String path, {String? resolution}) {
+    _runMrpRequest(MrpOpenRequest(path: path, resolution: resolution));
+  }
+
+  void _runMrpRequest(MrpOpenRequest request) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => widget.playerBuilder(path, _dnsMap)),
+      MaterialPageRoute(builder: (_) => widget.playerBuilder(request, _dnsMap)),
     );
   }
 
