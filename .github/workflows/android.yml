@@ -162,3 +162,15 @@ jobs:
           prerelease: false
           make_latest: true
           files: dist/skyengine-${{ github.ref_name }}.apk
+
+      - name: Publish to update server
+        env:
+          MRP_SERVER: ${{ secrets.MRP_SERVER }}
+          MRP_ACCESS_TOKEN: ${{ secrets.MRP_ACCESS_TOKEN }}
+        run: |
+          test -n "$MRP_SERVER"
+          test -n "$MRP_ACCESS_TOKEN"
+          node tool/publish_emulator_apk.js \
+            --file "dist/skyengine-${GITHUB_REF_NAME}.apk" \
+            --version "${{ steps.version.outputs.name }}" \
+            --changelog-md CHANGELOG.MD
