@@ -20,6 +20,13 @@
  *     --download-url https://example.com/emulator-1.2.3.apk \
  *     --version-code 42 --version 1.2.3
  *
+ *   # 服务端下载文件（fetch_file，version_code/version/file_size/checksum 自动从文件获取）
+ *   node tool/publish_emulator_apk.js \
+ *     --server https://example.com \
+ *     --token mrp_at_xxxx \
+ *     --download-url https://example.com/emulator-1.2.3.apk \
+ *     --fetch-file
+ *
  * 服务器地址与令牌也可通过环境变量提供：MRP_SERVER / MRP_ACCESS_TOKEN
  */
 
@@ -36,16 +43,18 @@ function usage(exitCode) {
   --token <token>         访问令牌 mrp_at_...（或环境变量 MRP_ACCESS_TOKEN）
   --file <path>           APK 文件路径（与 --download-url 二选一）
   --download-url <url>    APK 外部下载地址（与 --file 二选一）
-  --version-code <int>    版本号，使用 --download-url 时必填
+  --fetch-file            将 download_url 的文件下载到服务器（须为 http(s) 地址），
+                          version_code/version/file_size/checksum 自动从文件获取
+  --version-code <int>    版本号，使用 --download-url 且未开启 --fetch-file 时必填
   --version <string>      版本名称，例如 1.2.3
   --changelog <text>      更新日志
   --changelog-file <path> 从文件读取更新日志
   --changelog-md <path>   从 CHANGELOG.MD 解析更新日志：提取 "## v<version>" 段落，
                           需配合 --version 使用（以上三者互斥）
   --force-update          强制更新（默认否）
-  --checksum <sha256>     文件 SHA-256（仅 --download-url 时有意义，
+  --checksum <sha256>     文件 SHA-256（仅 --download-url 且未开启 --fetch-file 时有意义，
                           使用 --file 时服务端自动计算）
-  --file-size <bytes>     文件大小（仅 --download-url 时有意义）
+  --file-size <bytes>     文件大小（仅 --download-url 且未开启 --fetch-file 时有意义）
   -h, --help              显示帮助
 `);
   process.exit(exitCode);
@@ -64,6 +73,7 @@ function parseArgs(argv) {
       case '--token': opts.token = next(); break;
       case '--file': opts.file = next(); break;
       case '--download-url': opts.downloadUrl = next(); break;
+      case '--fetch-file': opts.fetchFile = true; break;
       case '--version-code': opts.versionCode = next(); break;
       case '--version': opts.version = next(); break;
       case '--changelog': opts.changelog = next(); break;
@@ -120,7 +130,12 @@ async function main() {
   if (!token) fail('缺少访问令牌：请使用 --token 或设置环境变量 MRP_ACCESS_TOKEN');
   if (!opts.file && !opts.downloadUrl) fail('--file 与 --download-url 必须提供其一');
   if (opts.file && opts.downloadUrl) fail('--file 与 --download-url 不能同时提供');
-  if (opts.downloadUrl && !opts.versionCode) fail('使用 --download-url 时 --version-code 必填');
+  if (opts.fetchFile && !opts.downloadUrl) fail('--fetch-file 需要配合 --download-url 使用');
+  if (opts.fetchFile && !/^https?:\/\//i.test(opts.downloadUrl)) fail('--fetch-file 时 --download-url 必须为 http(s) 地址');
+  if (opts.downloadUrl && !opts.fetchFile && !opts.versionCode) fail('使用 --download-url 且未开启 --fetch-file 时 --version-code 必填');
+  if (opts.fetchFile && (opts.checksum || opts.fileSize !== undefined)) {
+    fail('--fetch-file 开启后 checksum/file_size 由服务端计算，不能同时提供 --checksum / --file-size');
+  }
   const changelogSources = [opts.changelog, opts.changelogFile, opts.changelogMd].filter((v) => v !== undefined);
   if (changelogSources.length > 1) fail('--changelog、--changelog-file、--changelog-md 只能提供其一');
   if (opts.changelogMd && !opts.version) fail('使用 --changelog-md 时 --version 必填');
@@ -163,10 +178,11 @@ async function main() {
     // Content-Type 由 fetch 根据 FormData 自动设置（含 boundary）
   } else {
     const payload = {
-      version_code: opts.versionCode,
       download_url: opts.downloadUrl,
       force_update: !!opts.forceUpdate,
     };
+    if (opts.versionCode !== undefined) payload.version_code = opts.versionCode;
+    if (opts.fetchFile) payload.fetch_file = true;
     if (opts.version) payload.version = opts.version;
     if (changelog) payload.changelog = changelog;
     if (opts.checksum) payload.checksum = opts.checksum;
@@ -199,7 +215,7 @@ async function main() {
 
   const reason = data?.error || text || '(无响应内容)';
   const hint = {
-    400: '参数错误（version_code 缺失或不大于已有最大版本号、未提供 file/download_url、文件超限等）',
+    400: '参数错误（version_code 缺失或不大于已有最大版本号、未提供 file/download_url、文件超限、fetch_file 下载失败等）',
     401: '令牌无效、已过期或已撤销',
     403: '令牌缺少 emulator_apk:publish 作用域',
   }[response.status];

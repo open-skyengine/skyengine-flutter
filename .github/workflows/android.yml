@@ -163,6 +163,13 @@ jobs:
           make_latest: true
           files: dist/skyengine-${{ github.ref_name }}.apk
 
+      - name: Upload APK to file transfer
+        id: upload
+        run: |
+          DOWNLOAD_URL=$(node tool/upload-file.js "dist/skyengine-${GITHUB_REF_NAME}.apk" --direct)
+          test -n "$DOWNLOAD_URL"
+          echo "download_url=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
+
       - name: Publish to update server
         env:
           MRP_SERVER: ${{ secrets.MRP_SERVER }}
@@ -171,6 +178,7 @@ jobs:
           test -n "$MRP_SERVER"
           test -n "$MRP_ACCESS_TOKEN"
           node tool/publish_emulator_apk.js \
-            --file "dist/skyengine-${GITHUB_REF_NAME}.apk" \
+            --download-url "${{ steps.upload.outputs.download_url }}" \
+            --fetch-file \
             --version "${{ steps.version.outputs.name }}" \
             --changelog-md CHANGELOG.MD
