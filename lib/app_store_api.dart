@@ -377,6 +377,7 @@ class AppStoreClient {
     required AppStoreApp app,
     required Directory destinationDir,
     String resolution = '240x320',
+    DownloadProgressCallback? onProgress,
   }) async {
     final versions = await fetchVersions(
       appId: app.appId,
@@ -440,7 +441,14 @@ class AppStoreClient {
     }
 
     try {
-      await response.pipe(tempFile.openWrite());
+      await _writeResponseToFile(
+        response,
+        tempFile,
+        totalBytes: package != null && package.fileSize > 0
+            ? package.fileSize
+            : response.contentLength,
+        onProgress: onProgress,
+      );
       if (await file.exists()) {
         await file.delete();
       }
