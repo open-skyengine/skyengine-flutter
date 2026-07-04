@@ -188,11 +188,34 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     _currentResolution = MrpResolution(widget.screenWidth, widget.screenHeight);
     _title = _resolveTitle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _keyboardFocusNode.requestFocus();
+      if (!mounted) {
+        return;
       }
+      _keyboardFocusNode.requestFocus();
+      _startEngineAfterRouteTransition();
     });
-    Future.delayed(Duration.zero, _startEngine);
+  }
+
+  // engine.init()/start() are synchronous FFI calls that block the UI thread;
+  // starting them before the push transition finishes freezes the animation,
+  // so the page first paints its loading state and the engine starts after
+  // the route settles.
+  void _startEngineAfterRouteTransition() {
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) {
+      Future.delayed(Duration.zero, _startEngine);
+      return;
+    }
+    late final AnimationStatusListener listener;
+    listener = (status) {
+      if (status == AnimationStatus.completed) {
+        animation.removeStatusListener(listener);
+        Future.delayed(Duration.zero, _startEngine);
+      } else if (status == AnimationStatus.dismissed) {
+        animation.removeStatusListener(listener);
+      }
+    };
+    animation.addStatusListener(listener);
   }
 
   String _resolveTitle() {

@@ -32,7 +32,7 @@ class _AppStorePageState extends State<AppStorePage> {
   final AppStoreClient _client = AppStoreClient(const AppStoreApiConfig());
 
   final List<AppStoreApp> _apps = [];
-  final Set<int> _downloadingAppIds = {};
+  final Map<int, double?> _downloadProgress = {};
   Timer? _searchDebounce;
   bool _loadingFirstPage = false;
   bool _loadingMore = false;
@@ -196,16 +196,29 @@ class _AppStorePageState extends State<AppStorePage> {
       ).showSnackBar(const SnackBar(content: Text('MRP 目录还没有准备好')));
       return;
     }
-    if (_downloadingAppIds.contains(app.appId)) {
+    if (_downloadProgress.containsKey(app.appId)) {
       return;
     }
 
-    setState(() => _downloadingAppIds.add(app.appId));
+    setState(() => _downloadProgress[app.appId] = null);
+    var lastShownPercent = -1;
     try {
       final downloaded = await _client.downloadLatestVersion(
         app: app,
         destinationDir: Directory(mrpDir),
         resolution: _selectedResolution.label,
+        onProgress: (downloadedBytes, totalBytes) {
+          if (!mounted || totalBytes <= 0) {
+            return;
+          }
+          final fraction = (downloadedBytes / totalBytes).clamp(0.0, 1.0);
+          final percent = (fraction * 100).floor();
+          if (percent == lastShownPercent) {
+            return;
+          }
+          lastShownPercent = percent;
+          setState(() => _downloadProgress[app.appId] = fraction);
+        },
       );
       await widget.onDownloaded();
       if (!mounted) {
@@ -233,7 +246,7 @@ class _AppStorePageState extends State<AppStorePage> {
       ).showSnackBar(SnackBar(content: Text('下载失败：$e')));
     } finally {
       if (mounted) {
-        setState(() => _downloadingAppIds.remove(app.appId));
+        setState(() => _downloadProgress.remove(app.appId));
       }
     }
   }
@@ -412,7 +425,8 @@ class _AppStorePageState extends State<AppStorePage> {
   }
 
   Widget _buildAppTile(AppStoreApp app) {
-    final downloading = _downloadingAppIds.contains(app.appId);
+    final downloading = _downloadProgress.containsKey(app.appId);
+    final progress = _downloadProgress[app.appId];
     final subtitleParts = [
       if (app.manufacturer?.name.isNotEmpty ?? false) app.manufacturer!.name,
       if (app.description.isNotEmpty) app.description,
@@ -420,27 +434,52 @@ class _AppStorePageState extends State<AppStorePage> {
     return ListTile(
       leading: _buildIcon(app),
       title: Text(app.name.isEmpty ? app.internalName : app.name),
-      subtitle: Text(
-        subtitleParts.isEmpty
-            ? 'APP ID: ${app.appId}'
-            : subtitleParts.join('\n'),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      isThreeLine: subtitleParts.length > 1,
+      subtitle: downloading
+          ? _buildDownloadProgress(progress)
+          : Text(
+              subtitleParts.isEmpty
+                  ? 'APP ID: ${app.appId}'
+                  : subtitleParts.join('\n'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+      isThreeLine: !downloading && subtitleParts.length > 1,
       trailing: SizedBox(
         width: 48,
         height: 48,
         child: downloading
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(strokeWidth: 2),
+            ? Padding(
+                padding: const EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: progress,
+                ),
               )
             : IconButton(
                 tooltip: '下载并启动',
                 onPressed: () => unawaited(_downloadAndRun(app)),
                 icon: const Icon(Icons.play_arrow),
               ),
+      ),
+    );
+  }
+
+  Widget _buildDownloadProgress(double? progress) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LinearProgressIndicator(value: progress),
+          const SizedBox(height: 4),
+          Text(
+            progress == null
+                ? '正在下载…'
+                : '正在下载 ${(progress * 100).floor()}%',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
