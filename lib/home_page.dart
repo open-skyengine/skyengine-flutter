@@ -8,8 +8,8 @@ import 'android_app_update.dart';
 import 'android_mythroad_assets.dart';
 import 'android_mrp_open.dart';
 import 'app_store_api.dart';
-import 'debug_page.dart';
 import 'local_mrp_files.dart';
+import 'more_page.dart';
 
 typedef AppStoreRunMrp = void Function(String path, {String? resolution});
 
@@ -665,7 +665,7 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
-          const DebugPage(),
+          const MorePage(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -673,7 +673,7 @@ class _HomePageState extends State<HomePage> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.folder), label: '本地'),
           NavigationDestination(icon: Icon(Icons.storefront), label: '商店'),
-          NavigationDestination(icon: Icon(Icons.bug_report), label: '调试'),
+          NavigationDestination(icon: Icon(Icons.more_horiz), label: '更多'),
         ],
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);

@@ -5,6 +5,9 @@ import 'package:ffi/ffi.dart';
 typedef VmrpApiInitC = Int32 Function(Int32, Int32);
 typedef VmrpApiInitDart = int Function(int, int);
 
+typedef VmrpApiSetMemoryC = Int32 Function(Int32);
+typedef VmrpApiSetMemoryDart = int Function(int);
+
 typedef VmrpApiSetWorkDirC = Int32 Function(Pointer<Utf8>);
 typedef VmrpApiSetWorkDirDart = int Function(Pointer<Utf8>);
 
@@ -83,6 +86,7 @@ class VmrpBindings {
   late final DynamicLibrary _lib;
 
   late final VmrpApiInitDart init;
+  late final VmrpApiSetMemoryDart setMemory;
   late final VmrpApiSetWorkDirDart setWorkDir;
   late final VmrpApiStartDart start;
   late final VmrpApiSetDnsMapDart setDnsMap;
@@ -120,6 +124,9 @@ class VmrpBindings {
     }
 
     init = _lib.lookupFunction<VmrpApiInitC, VmrpApiInitDart>('vmrp_api_init');
+    setMemory = _lib.lookupFunction<VmrpApiSetMemoryC, VmrpApiSetMemoryDart>(
+      'vmrp_api_set_memory',
+    );
     setWorkDir = _lib.lookupFunction<VmrpApiSetWorkDirC, VmrpApiSetWorkDirDart>(
       'vmrp_api_set_work_dir',
     );

@@ -271,72 +271,54 @@ class _AppStorePageState extends State<AppStorePage> {
       elevation: 1,
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: SearchBar(
-                controller: _searchController,
-                hintText: '搜索应用',
-                leading: const Icon(Icons.search),
-                trailing: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      tooltip: '清空',
-                      onPressed: () {
-                        _searchController.clear();
-                        unawaited(_reload());
-                      },
-                      icon: const Icon(Icons.close),
-                    ),
-                ],
-                onChanged: (value) {
-                  setState(() {});
-                  _onSearchChanged(value);
-                },
-                onSubmitted: (_) => unawaited(_reload()),
-              ),
-            ),
-            const SizedBox(width: 8),
-            PopupMenuButton<MrpResolution>(
-              tooltip: '分辨率',
-              initialValue: _selectedResolution,
-              onSelected: _selectResolution,
-              itemBuilder: (context) {
-                return [
-                  for (final resolution in kCommonMrpResolutions)
-                    PopupMenuItem(
-                      value: resolution,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 28,
-                            child: resolution == _selectedResolution
-                                ? const Icon(Icons.check, size: 20)
-                                : null,
-                          ),
-                          Text(resolution.label),
-                        ],
-                      ),
-                    ),
-                ];
+            SearchBar(
+              controller: _searchController,
+              hintText: '搜索应用',
+              leading: const Icon(Icons.search),
+              trailing: [
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    tooltip: '清空',
+                    onPressed: () {
+                      _searchController.clear();
+                      unawaited(_reload());
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+              ],
+              onChanged: (value) {
+                setState(() {});
+                _onSearchChanged(value);
               },
-              child: Container(
-                height: 48,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(context).dividerColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.aspect_ratio),
-                    const SizedBox(width: 6),
-                    Text(_selectedResolution.label),
+              onSubmitted: (_) => unawaited(_reload()),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text('分辨率', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 12),
+                DropdownButton<MrpResolution>(
+                  value: _selectedResolution,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  items: [
+                    for (final resolution in kCommonMrpResolutions)
+                      DropdownMenuItem(
+                        value: resolution,
+                        child: Text(resolution.label),
+                      ),
                   ],
+                  onChanged: (resolution) {
+                    if (resolution != null) {
+                      _selectResolution(resolution);
+                    }
+                  },
                 ),
-              ),
+              ],
             ),
           ],
         ),
