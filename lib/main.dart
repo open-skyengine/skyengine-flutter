@@ -4,9 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'app_store_page.dart';
-import 'home_page.dart';
-import 'mrp_player_page.dart';
+import 'pages/app_store_page.dart';
+import 'pages/home_page.dart';
+import 'pages/mrp_player_page.dart';
 
 void main() {
   runApp(const MyApp());

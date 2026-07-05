@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/android_mrp_open.dart';
+import 'package:skyengine/platform/android_mrp_open.dart';
 
 void main() {
   test('MRP open request parses legacy string path', () {

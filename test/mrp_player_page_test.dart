@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gbk_codec/gbk_codec.dart';
-import 'package:skyengine/mrp_resolution.dart';
-import 'package:skyengine/mrp_player_page.dart';
+import 'package:skyengine/models/mrp_resolution.dart';
+import 'package:skyengine/pages/mrp_player_page.dart';
 
 void main() {
   test('MRP player title uses package metadata name', () async {

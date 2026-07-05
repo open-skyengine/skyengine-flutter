@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'android_app_update.dart';
-import 'android_mythroad_assets.dart';
-import 'android_mrp_open.dart';
-import 'app_store_api.dart';
-import 'local_mrp_files.dart';
+import '../platform/android_app_update.dart';
+import '../platform/android_mythroad_assets.dart';
+import '../platform/android_mrp_open.dart';
+import '../services/app_store_api.dart';
+import '../services/local_mrp_files.dart';
 import 'more_page.dart';
 
 typedef AppStoreRunMrp = void Function(String path, {String? resolution});

@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'app_store_api.dart';
-import 'mrp_resolution.dart';
+import '../services/app_store_api.dart';
+import '../models/mrp_resolution.dart';
 
 typedef RunMrpCallback = void Function(String path, {String? resolution});
 

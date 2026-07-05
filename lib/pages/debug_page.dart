@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'vmrp_engine.dart';
+import '../vmrp/vmrp_engine.dart';
 
 class DebugPage extends StatelessWidget {
   const DebugPage({super.key});

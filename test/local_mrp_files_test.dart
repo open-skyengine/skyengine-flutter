@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gbk_codec/gbk_codec.dart';
-import 'package:skyengine/local_mrp_files.dart';
+import 'package:skyengine/services/local_mrp_files.dart';
 
 void main() {
   test(
