@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/app_store_api.dart';
+import 'package:skyengine/services/app_store_api.dart';
 
 void main() {
   test('AppStoreClient signs, searches, paginates, and downloads', () async {

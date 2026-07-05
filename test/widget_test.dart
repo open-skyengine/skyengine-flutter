@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/android_mrp_open.dart';
-import 'package:skyengine/home_page.dart';
-import 'package:skyengine/mrp_player_page.dart';
+import 'package:skyengine/platform/android_mrp_open.dart';
+import 'package:skyengine/pages/home_page.dart';
+import 'package:skyengine/pages/mrp_player_page.dart';
 
 void main() {
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {

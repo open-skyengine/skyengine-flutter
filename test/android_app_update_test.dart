@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/android_app_update.dart';
+import 'package:skyengine/platform/android_app_update.dart';
 
 void main() {
   test('download notification status parses native payload', () {

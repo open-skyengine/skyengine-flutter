@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'emulator_settings.dart';
-import 'local_mrp_files.dart';
-import 'mrp_resolution.dart';
-import 'vmrp_engine.dart';
-import 'vmrp_widget.dart';
+import '../services/emulator_settings.dart';
+import '../services/local_mrp_files.dart';
+import '../models/mrp_resolution.dart';
+import '../vmrp/vmrp_engine.dart';
+import '../vmrp/vmrp_widget.dart';
 
 String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
   final normalizedMrpPath = mrpPath.replaceAll('\\', '/');

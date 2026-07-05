@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'mrp_resolution.dart';
+import '../models/mrp_resolution.dart';
 
 class MrpOpenRequest {
   final String path;

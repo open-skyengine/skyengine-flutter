@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'emulator_settings.dart';
+import '../services/emulator_settings.dart';
 
 class EmulatorSettingsPage extends StatefulWidget {
   const EmulatorSettingsPage({super.key});
