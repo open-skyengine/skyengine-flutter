@@ -110,6 +110,20 @@ class VmrpEngine {
     }
   }
 
+  int setMemoryMb(int memoryMb) {
+    if (!_ensureBindings()) return -1;
+    try {
+      final ret = _bindings!.setMemory(memoryMb);
+      if (ret != 0) {
+        lastError = 'vmrp_api_set_memory returned $ret';
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_set_memory crashed: $e';
+      return -1;
+    }
+  }
+
   int start(
     String mrpPath, {
     String ext = 'start.mr',

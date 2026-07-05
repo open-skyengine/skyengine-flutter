@@ -37,11 +37,18 @@ void main() {
       expect(find.text('SkyEngine'), findsOneWidget);
       expect(find.text('本地'), findsOneWidget);
       expect(find.text('商店'), findsOneWidget);
+      expect(find.text('更多'), findsOneWidget);
 
       await tester.tap(find.text('商店'));
       await tester.pump();
 
       expect(find.text('搜索应用'), findsOneWidget);
+
+      await tester.tap(find.text('更多'));
+      await tester.pump();
+
+      expect(find.text('模拟器设置'), findsOneWidget);
+      expect(find.text('调试'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() => tempDir.delete(recursive: true));

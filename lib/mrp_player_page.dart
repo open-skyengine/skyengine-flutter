@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'emulator_settings.dart';
 import 'local_mrp_files.dart';
 import 'mrp_resolution.dart';
 import 'vmrp_engine.dart';
@@ -222,7 +223,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     return mrpPlayerTitleForPath(widget.mrpPath, title: widget.title);
   }
 
-  void _startEngine() {
+  Future<void> _startEngine() async {
+    await EmulatorSettings.instance.ensureLoaded();
     if (!mounted || _disposedEngine) {
       return;
     }
@@ -252,6 +254,14 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       setState(() => _error = 'Engine init failed: ${engine.lastError}');
       engine.dispose();
       return;
+    }
+
+    final memoryMb = EmulatorSettings.instance.memoryMb;
+    final memoryRet = engine.setMemoryMb(memoryMb);
+    debugPrint('[VMRP] setMemoryMb($memoryMb) returned $memoryRet');
+    if (memoryRet != 0) {
+      // 设置失败时引擎沿用默认内存，不阻断启动。
+      debugPrint('[VMRP] set memory failed: ${engine.lastError}');
     }
 
     final imageModeRet = engine.setImageProcessingMode(_imageProcessingMode);
