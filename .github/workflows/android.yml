@@ -76,7 +76,7 @@ jobs:
           } > android/key.properties
 
       - name: Build release APK
-        run: flutter build apk --release --build-name 1.0.6-dev --build-number ${{ github.run_number }}
+        run: flutter build apk --release --build-name 1.0.9-dev --build-number ${{ github.run_number }}
 
       - name: Prepare dev artifact
         run: |
