@@ -239,8 +239,13 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
     final workDir = _workDirForMrp(widget.mrpPath);
     final runtimeMrpPath = runtimeMrpPathForWorkDir(widget.mrpPath, workDir);
+    final dnsMap = widget.dnsMap?.trim();
     debugPrint('[VMRP] workDir: $workDir');
     debugPrint('[VMRP] runtimeMrpPath: $runtimeMrpPath');
+    debugPrint(
+      '[VMRP] dnsMap: '
+      '${dnsMap == null || dnsMap.isEmpty ? '(empty)' : dnsMap}',
+    );
 
     final engine = VmrpEngine(
       screenWidth: _currentResolution.width,
@@ -277,7 +282,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     final startRet = engine.start(
       runtimeMrpPath,
       workDir: workDir,
-      dnsMap: widget.dnsMap,
+      dnsMap: dnsMap,
     );
     debugPrint('[VMRP] start() returned $startRet');
     if (startRet != 0) {

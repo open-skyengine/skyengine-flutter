@@ -192,8 +192,13 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) {
         return;
       }
+      final dnsMap = _dnsMapFromHosts(config.hosts);
+      debugPrint(
+        '[VMRP] remote hosts: ${config.hosts.length}, '
+        'dnsMap: ${dnsMap == null ? '(empty)' : dnsMap}',
+      );
       setState(() {
-        _dnsMap = _dnsMapFromHosts(config.hosts);
+        _dnsMap = dnsMap;
       });
     } catch (error, stackTrace) {
       debugPrintStack(stackTrace: stackTrace);
