@@ -499,9 +499,15 @@ class AppStoreClient {
       await destinationDir.create(recursive: true);
     }
 
+    final target = File(
+      '${destinationDir.path}${Platform.pathSeparator}'
+      '${_emulatorApkFileName(version)}',
+    );
+    await _deleteStaleEmulatorApks(destinationDir, keep: target);
+
     final downloadedApk = await _findDownloadedEmulatorApk(
       version: version,
-      destinationDir: destinationDir,
+      target: target,
     );
     if (downloadedApk != null) {
       return DownloadedEmulatorApk(
@@ -520,18 +526,6 @@ class AppStoreClient {
       throw AppStoreApiException(message, statusCode: response.statusCode);
     }
 
-    final headerName = _filenameFromDisposition(
-      response.headers.value('content-disposition'),
-    );
-    final target = headerName == null
-        ? File(
-            '${destinationDir.path}${Platform.pathSeparator}'
-            '${_emulatorApkFileName(version)}',
-          )
-        : File(
-            '${destinationDir.path}${Platform.pathSeparator}'
-            '${_sanitizeApkFileName(headerName)}',
-          );
     final tempFile = File('${target.path}.download');
 
     if (await tempFile.exists()) {
@@ -547,6 +541,9 @@ class AppStoreClient {
             : response.contentLength,
         onProgress: onProgress,
       );
+      if (!await _hasExpectedEmulatorApkContents(tempFile, version)) {
+        throw const AppStoreApiException('下载的更新包不完整或校验失败');
+      }
       if (await target.exists()) {
         await target.delete();
       }
@@ -559,6 +556,34 @@ class AppStoreClient {
     }
 
     return DownloadedEmulatorApk(file: target, version: version);
+  }
+
+  Future<void> cleanupInstalledEmulatorUpdates({
+    required Directory destinationDir,
+    required int installedVersionCode,
+  }) async {
+    if (!await destinationDir.exists()) {
+      return;
+    }
+
+    await for (final entity in destinationDir.list(followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final fileName = _fileNameFromPath(entity.path);
+      final cachedVersionCode = _emulatorVersionCodeFromFileName(fileName);
+      final isIncompleteDownload = fileName.toLowerCase().endsWith(
+        '.apk.download',
+      );
+      final isUntrustedLegacyApk =
+          fileName.toLowerCase().endsWith('.apk') && cachedVersionCode == null;
+      final isInstalledApk =
+          cachedVersionCode != null &&
+          cachedVersionCode <= installedVersionCode;
+      if (isIncompleteDownload || isUntrustedLegacyApk || isInstalledApk) {
+        await entity.delete();
+      }
+    }
   }
 
   Future<void> _writeResponseToFile(
@@ -746,33 +771,74 @@ class AppStoreClient {
     if (!file.path.toLowerCase().endsWith('.apk')) {
       return false;
     }
+    return _hasExpectedEmulatorApkContents(file, version);
+  }
+
+  Future<bool> _hasExpectedEmulatorApkContents(
+    File file,
+    AppStoreEmulatorVersion version,
+  ) async {
+    if (!await file.exists()) {
+      return false;
+    }
     final length = await file.length();
     if (length <= 0) {
       return false;
     }
-    return version.fileSize <= 0 || length == version.fileSize;
+    if (version.fileSize > 0 && length != version.fileSize) {
+      return false;
+    }
+    return _matchesChecksum(file, version.checksum);
+  }
+
+  Future<bool> _matchesChecksum(File file, String checksum) async {
+    final match = RegExp(
+      r'^(?:(sha256|md5)[:=])?([0-9a-f]+)$',
+      caseSensitive: false,
+    ).firstMatch(checksum.trim());
+    if (match == null) {
+      return true;
+    }
+
+    final expected = match.group(2)!.toLowerCase();
+    final algorithmName = match.group(1)?.toLowerCase();
+    final Hash? algorithm = switch (algorithmName) {
+      'sha256' => sha256,
+      'md5' => md5,
+      null when expected.length == 64 => sha256,
+      null when expected.length == 32 => md5,
+      _ => null,
+    };
+    if (algorithm == null) {
+      return true;
+    }
+
+    final actual = await algorithm.bind(file.openRead()).first;
+    return actual.toString() == expected;
   }
 
   Future<File?> _findDownloadedEmulatorApk({
     required AppStoreEmulatorVersion version,
-    required Directory destinationDir,
+    required File target,
   }) async {
-    for (final fileName in _downloadedEmulatorApkNameCandidates(version)) {
-      final file = File(
-        '${destinationDir.path}${Platform.pathSeparator}$fileName',
-      );
-      if (await _isCompleteDownloadedEmulatorApk(file, version)) {
-        return file;
-      }
-    }
+    return await _isCompleteDownloadedEmulatorApk(target, version)
+        ? target
+        : null;
+  }
 
+  Future<void> _deleteStaleEmulatorApks(
+    Directory destinationDir, {
+    required File keep,
+  }) async {
     await for (final entity in destinationDir.list(followLinks: false)) {
-      if (entity is File &&
-          await _isCompleteDownloadedEmulatorApk(entity, version)) {
-        return entity;
+      if (entity is! File || entity.path == keep.path) {
+        continue;
+      }
+      final name = entity.path.toLowerCase();
+      if (name.endsWith('.apk') || name.endsWith('.apk.download')) {
+        await entity.delete();
       }
     }
-    return null;
   }
 
   Iterable<String> _downloadedFileNameCandidates({
@@ -788,18 +854,6 @@ class AppStoreClient {
     final packageName = _filenameFromDownloadPath(package?.downloadUrl);
     if (packageName != null) {
       yield _sanitizeMrpFileName(packageName);
-    }
-  }
-
-  Iterable<String> _downloadedEmulatorApkNameCandidates(
-    AppStoreEmulatorVersion version,
-  ) sync* {
-    yield _emulatorApkFileName(version);
-    if (version.downloadUrl != null && version.downloadUrl!.isNotEmpty) {
-      final name = Uri.parse(version.downloadUrl!).path.split('/').last.trim();
-      if (name.toLowerCase().endsWith('.apk')) {
-        yield _sanitizeApkFileName(name);
-      }
     }
   }
 
@@ -1055,10 +1109,17 @@ String _sanitizeApkFileName(String value) {
 }
 
 String _emulatorApkFileName(AppStoreEmulatorVersion version) {
-  final versionPart = version.version.isEmpty
-      ? version.versionCode
-      : version.version;
-  return _sanitizeApkFileName('skyengine-$versionPart.apk');
+  return _sanitizeApkFileName(
+    'skyengine-v${version.versionCode}-id${version.id}.apk',
+  );
+}
+
+int? _emulatorVersionCodeFromFileName(String fileName) {
+  final match = RegExp(
+    r'^skyengine-v([0-9]+)-id[0-9]+\.apk$',
+    caseSensitive: false,
+  ).firstMatch(fileName);
+  return match == null ? null : int.tryParse(match.group(1)!);
 }
 
 int _readInt(dynamic value, {int fallback = 0}) {

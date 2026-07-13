@@ -64,7 +64,7 @@ void main() {
         destinationDir: tempDir,
       );
       expect(await apk.file.readAsString(), 'APK-DATA');
-      expect(apk.file.path.endsWith('skyengine.apk'), isTrue);
+      expect(apk.file.path.endsWith('skyengine-v42-id9.apk'), isTrue);
 
       final apkAgain = await client.downloadEmulatorVersion(
         version: update.latest!,
@@ -108,6 +108,136 @@ void main() {
       client.close();
       await server.close(force: true);
       await serverDone;
+      await tempDir.delete(recursive: true);
+    }
+  });
+
+  test(
+    'AppStoreClient downloads a newer emulator apk instead of reusing old cache',
+    () async {
+      final requests = <Uri>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final serverDone = _serveEmulatorDownloads(server, requests);
+      final tempDir = await Directory.systemTemp.createTemp(
+        'skyengine_emulator_update_test_',
+      );
+      final client = AppStoreClient(
+        AppStoreApiConfig(
+          baseUrl: 'http://${server.address.host}:${server.port}/api/app/v1',
+          key: 'dev-app-key',
+          secret: 'dev-app-secret-change-me',
+        ),
+      );
+
+      const oldContent = 'APK-OLD!';
+      const newContent = 'APK-NEW!';
+      final oldVersion = AppStoreEmulatorVersion(
+        id: 9,
+        platform: 'android',
+        versionCode: 42,
+        version: '1.2.3',
+        changelog: 'old',
+        downloadUrl: '/api/app/v1/emulator/versions/9/download',
+        fileSize: oldContent.length,
+        checksum: _sha256Text(oldContent),
+        forceUpdate: false,
+      );
+      final newVersion = AppStoreEmulatorVersion(
+        id: 10,
+        platform: 'android',
+        versionCode: 43,
+        version: '1.2.4',
+        changelog: 'new',
+        downloadUrl: '/api/app/v1/emulator/versions/10/download',
+        fileSize: newContent.length,
+        checksum: _sha256Text(newContent),
+        forceUpdate: false,
+      );
+
+      try {
+        final oldApk = await client.downloadEmulatorVersion(
+          version: oldVersion,
+          destinationDir: tempDir,
+        );
+        expect(await oldApk.file.readAsString(), oldContent);
+        expect(oldApk.file.path.endsWith('skyengine-v42-id9.apk'), isTrue);
+
+        final newApk = await client.downloadEmulatorVersion(
+          version: newVersion,
+          destinationDir: tempDir,
+        );
+        expect(await newApk.file.readAsString(), newContent);
+        expect(newApk.file.path.endsWith('skyengine-v43-id10.apk'), isTrue);
+        expect(await oldApk.file.exists(), isFalse);
+
+        final newApkAgain = await client.downloadEmulatorVersion(
+          version: newVersion,
+          destinationDir: tempDir,
+        );
+        expect(newApkAgain.file.path, newApk.file.path);
+        expect(newApkAgain.alreadyDownloaded, isTrue);
+
+        expect(
+          requests
+              .where(
+                (uri) => uri.path == '/api/app/v1/emulator/versions/9/download',
+              )
+              .length,
+          1,
+        );
+        expect(
+          requests
+              .where(
+                (uri) =>
+                    uri.path == '/api/app/v1/emulator/versions/10/download',
+              )
+              .length,
+          1,
+        );
+      } finally {
+        client.close();
+        await server.close(force: true);
+        await serverDone;
+        await tempDir.delete(recursive: true);
+      }
+    },
+  );
+
+  test('AppStoreClient cleans installed emulator update packages', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'skyengine_emulator_cleanup_test_',
+    );
+    final client = AppStoreClient(const AppStoreApiConfig());
+
+    try {
+      final installedApk = File(
+        '${tempDir.path}${Platform.pathSeparator}skyengine-v42-id9.apk',
+      );
+      final pendingApk = File(
+        '${tempDir.path}${Platform.pathSeparator}skyengine-v43-id10.apk',
+      );
+      final legacyApk = File(
+        '${tempDir.path}${Platform.pathSeparator}skyengine.apk',
+      );
+      final partialApk = File(
+        '${tempDir.path}${Platform.pathSeparator}skyengine-v44-id11.apk.download',
+      );
+      await installedApk.writeAsString('installed');
+      await pendingApk.writeAsString('pending');
+      await legacyApk.writeAsString('legacy');
+      await partialApk.writeAsString('partial');
+
+      await client.cleanupInstalledEmulatorUpdates(
+        destinationDir: tempDir,
+        installedVersionCode: 42,
+      );
+
+      expect(await installedApk.exists(), isFalse);
+      expect(await pendingApk.exists(), isTrue);
+      expect(await legacyApk.exists(), isFalse);
+      expect(await partialApk.exists(), isFalse);
+    } finally {
+      client.close();
       await tempDir.delete(recursive: true);
     }
   });
@@ -282,6 +412,44 @@ void _writeJson(HttpResponse response, Map<String, Object> body) {
   response.close();
 }
 
+Future<void> _serveEmulatorDownloads(
+  HttpServer server,
+  List<Uri> requests,
+) async {
+  await for (final request in server) {
+    requests.add(request.uri);
+    expect(request.headers.value('X-App-Key'), 'dev-app-key');
+    expect(request.headers.value('X-App-Timestamp'), isNotEmpty);
+    expect(request.headers.value('X-App-Nonce'), isNotEmpty);
+    expect(
+      request.headers.value('X-App-Signature'),
+      _expectedSignature(request),
+    );
+
+    final content = switch (request.uri.path) {
+      '/api/app/v1/emulator/versions/9/download' => 'APK-OLD!',
+      '/api/app/v1/emulator/versions/10/download' => 'APK-NEW!',
+      _ => null,
+    };
+    if (content == null) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      continue;
+    }
+
+    request.response.headers.contentType = ContentType(
+      'application',
+      'vnd.android.package-archive',
+    );
+    request.response.headers.set(
+      'content-disposition',
+      'attachment; filename="skyengine.apk"',
+    );
+    request.response.add(utf8.encode(content));
+    await request.response.close();
+  }
+}
+
 String _expectedSignature(HttpRequest request) {
   const emptyBodySha256 =
       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -297,6 +465,10 @@ String _expectedSignature(HttpRequest request) {
     sha256,
     utf8.encode('dev-app-secret-change-me'),
   ).convert(utf8.encode(message)).toString();
+}
+
+String _sha256Text(String value) {
+  return sha256.convert(utf8.encode(value)).toString();
 }
 
 String _canonicalQuery(Uri uri) {
