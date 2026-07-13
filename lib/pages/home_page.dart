@@ -208,6 +208,21 @@ class _HomePageState extends State<HomePage> {
     _checkingUpdate = true;
     try {
       final versionCode = await _androidAppUpdate.getVersionCode();
+      final workDir = _workDir;
+      if (versionCode != null && workDir != null) {
+        final updatesDir = Directory(
+          '${workDir.path}${Platform.pathSeparator}updates',
+        );
+        try {
+          await _appStoreClient.cleanupInstalledEmulatorUpdates(
+            destinationDir: updatesDir,
+            installedVersionCode: versionCode,
+          );
+        } catch (error, stackTrace) {
+          debugPrintStack(stackTrace: stackTrace);
+          debugPrint('Failed to clean installed update packages: $error');
+        }
+      }
       final update = await _appStoreClient.checkEmulatorUpdate(
         versionCode: versionCode,
       );
