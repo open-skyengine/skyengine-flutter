@@ -51,12 +51,13 @@ String mrpPlayerTitleForPath(String mrpPath, {String? title}) {
   return fileNameWithoutExtension(localFiles.fileName(mrpPath));
 }
 
-enum _KeypadMode { directional, numeric, none }
+enum _KeypadMode { directional, numeric, full, none }
 
 extension on _KeypadMode {
   String get label => switch (this) {
     _KeypadMode.directional => '方向键',
     _KeypadMode.numeric => '9键',
+    _KeypadMode.full => '全键',
     _KeypadMode.none => '无键盘',
   };
 }
@@ -157,6 +158,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   static const Duration _virtualKeyHapticDebounce = Duration(milliseconds: 80);
   static const double _keypadGap = 18;
   static const double _keypadColumnGap = 18;
+  static const double _fullKeypadColumnGap = 8;
+  static const double _fullKeypadSectionGap = 18;
   static const double _keypadRowGap = 10;
   static const double _keypadButtonWidth = 84;
   static const double _keypadButtonHeight = 44;
@@ -177,6 +180,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     return switch (_keypadMode) {
       _KeypadMode.directional => _keypadButtonHeight * 3 + _keypadRowGap * 2,
       _KeypadMode.numeric => _keypadButtonHeight * 4 + _keypadRowGap * 3,
+      _KeypadMode.full => _keypadButtonHeight * 4 + _keypadRowGap * 3,
       _KeypadMode.none => 0,
     };
   }
@@ -990,36 +994,52 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     return switch (_keypadMode) {
       _KeypadMode.directional => _buildDirectionalKeypad(),
       _KeypadMode.numeric => _buildNumericKeypad(),
+      _KeypadMode.full => _buildFullKeypad(),
       _KeypadMode.none => const SizedBox.shrink(),
     };
   }
 
-  Widget _buildDirectionalKeypad() {
+  Widget _buildDirectionalKeypad({
+    double buttonWidth = _keypadButtonWidth,
+    double columnGap = _keypadColumnGap,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _keypadRow([
-          _keyButton('左软键', VmrpKey.softLeft),
-          _keyButton('上', VmrpKey.up),
-          _keyButton('右软键', VmrpKey.softRight),
-        ]),
+        _keypadRow(
+          [
+            _keyButton('左软键', VmrpKey.softLeft, width: buttonWidth),
+            _keyButton('上', VmrpKey.up, width: buttonWidth),
+            _keyButton('右软键', VmrpKey.softRight, width: buttonWidth),
+          ],
+          columnGap: columnGap,
+        ),
         const SizedBox(height: _keypadRowGap),
-        _keypadRow([
-          _keyButton('左', VmrpKey.left),
-          _keyButton('确定', VmrpKey.select),
-          _keyButton('右', VmrpKey.right),
-        ]),
+        _keypadRow(
+          [
+            _keyButton('左', VmrpKey.left, width: buttonWidth),
+            _keyButton('确定', VmrpKey.select, width: buttonWidth),
+            _keyButton('右', VmrpKey.right, width: buttonWidth),
+          ],
+          columnGap: columnGap,
+        ),
         const SizedBox(height: _keypadRowGap),
-        _keypadRow([
-          const SizedBox(width: _keypadButtonWidth),
-          _keyButton('下', VmrpKey.down),
-          const SizedBox(width: _keypadButtonWidth),
-        ]),
+        _keypadRow(
+          [
+            SizedBox(width: buttonWidth),
+            _keyButton('下', VmrpKey.down, width: buttonWidth),
+            SizedBox(width: buttonWidth),
+          ],
+          columnGap: columnGap,
+        ),
       ],
     );
   }
 
-  Widget _buildNumericKeypad() {
+  Widget _buildNumericKeypad({
+    double buttonWidth = _keypadButtonWidth,
+    double columnGap = _keypadColumnGap,
+  }) {
     const keys = [
       [('1', VmrpKey.key1), ('2', VmrpKey.key2), ('3', VmrpKey.key3)],
       [('4', VmrpKey.key4), ('5', VmrpKey.key5), ('6', VmrpKey.key6)],
@@ -1031,26 +1051,72 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final row in keys) ...[
-          _keypadRow([for (final key in row) _keyButton(key.$1, key.$2)]),
+          _keypadRow(
+            [
+              for (final key in row)
+                _keyButton(key.$1, key.$2, width: buttonWidth),
+            ],
+            columnGap: columnGap,
+          ),
           if (row != keys.last) const SizedBox(height: _keypadRowGap),
         ],
       ],
     );
   }
 
-  Widget _keypadRow(List<Widget> children) {
+  Widget _buildFullKeypad() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableButtonWidth = constraints.maxWidth.isFinite
+            ? (constraints.maxWidth -
+                      _fullKeypadSectionGap -
+                      _fullKeypadColumnGap * 4) /
+                  6
+            : _keypadButtonWidth;
+        final buttonWidth = availableButtonWidth.clamp(
+          1.0,
+          _keypadButtonWidth,
+        );
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildDirectionalKeypad(
+              buttonWidth: buttonWidth,
+              columnGap: _fullKeypadColumnGap,
+            ),
+            const SizedBox(width: _fullKeypadSectionGap),
+            _buildNumericKeypad(
+              buttonWidth: buttonWidth,
+              columnGap: _fullKeypadColumnGap,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _keypadRow(
+    List<Widget> children, {
+    double columnGap = _keypadColumnGap,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (var i = 0; i < children.length; i++) ...[
-          if (i > 0) const SizedBox(width: _keypadColumnGap),
+          if (i > 0) SizedBox(width: columnGap),
           children[i],
         ],
       ],
     );
   }
 
-  Widget _keyButton(String label, int keyCode) {
+  Widget _keyButton(
+    String label,
+    int keyCode, {
+    double width = _keypadButtonWidth,
+  }) {
     return GestureDetector(
       onTapDown: (_) {
         unawaited(_vibrateVirtualKey());
@@ -1059,7 +1125,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       onTapUp: (_) => _engine?.sendKeyUp(keyCode),
       onTapCancel: () => _engine?.sendKeyUp(keyCode),
       child: Container(
-        width: _keypadButtonWidth,
+        width: width,
         height: _keypadButtonHeight,
         decoration: BoxDecoration(
           color: Colors.grey[800],

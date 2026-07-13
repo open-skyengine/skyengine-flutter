@@ -195,7 +195,7 @@ class _HomePageState extends State<HomePage> {
       final dnsMap = _dnsMapFromHosts(config.hosts);
       debugPrint(
         '[VMRP] remote hosts: ${config.hosts.length}, '
-        'dnsMap: ${dnsMap == null ? '(empty)' : dnsMap}',
+        "dnsMap: ${dnsMap ?? '(empty)'}",
       );
       setState(() {
         _dnsMap = dnsMap;
