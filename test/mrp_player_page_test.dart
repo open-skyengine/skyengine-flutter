@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gbk_codec/gbk_codec.dart';
 import 'package:skyengine/models/mrp_resolution.dart';
@@ -52,6 +53,26 @@ void main() {
         '480x800',
       ]),
     );
+  });
+
+  testWidgets('keyboard dialog includes full keypad mode', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: MrpPlayerPage(mrpPath: 'missing.mrp')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('切换键盘'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('方向键'), findsOneWidget);
+    expect(find.text('9键'), findsOneWidget);
+    expect(find.text('全键'), findsOneWidget);
+    expect(find.text('无键盘'), findsOneWidget);
   });
 }
 
