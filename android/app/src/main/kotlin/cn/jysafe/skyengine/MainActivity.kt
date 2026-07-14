@@ -4,9 +4,11 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.res.AssetManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -37,13 +39,45 @@ class MainActivity : FlutterActivity() {
     private var debugKeysChannel: MethodChannel? = null
     private var initialMrpRequest: ImportedMrp? = null
     private var pendingInstallApk: File? = null
+    private var pendingUpdateDownloadResult: MethodChannel.Result? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
+    private var updateDownloadReceiverRegistered = false
+    private var activityResumed = false
     private var hardwareKeyCaptureEnabled = false
     private var debugKeyCaptureEnabled = false
     private val pressedHardwareKeys = mutableMapOf<Int, Int>()
+    private val updateDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != UpdateDownloadService.ACTION_DOWNLOAD_RESULT) return
+            val result = pendingUpdateDownloadResult ?: return
+            pendingUpdateDownloadResult = null
+            val path = intent.getStringExtra(UpdateDownloadService.EXTRA_RESULT_PATH)
+            val error = intent.getStringExtra(UpdateDownloadService.EXTRA_RESULT_ERROR)
+            if (!path.isNullOrBlank() && error.isNullOrBlank()) {
+                result.success(mapOf("path" to path))
+            } else {
+                result.error(
+                    ERROR_UPDATE_DOWNLOAD_FAILED,
+                    error ?: "后台下载失败",
+                    null,
+                )
+            }
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        if (!updateDownloadReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                updateDownloadReceiver,
+                IntentFilter(UpdateDownloadService.ACTION_DOWNLOAD_RESULT),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            updateDownloadReceiverRegistered = true
+        }
+        captureUpdateInstallIntent(intent)
 
         initialMrpRequest = initialMrpRequest ?: importMrpFromIntent(intent)
         mrpOpenChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MRP_OPEN_CHANNEL)
@@ -158,8 +192,7 @@ class MainActivity : FlutterActivity() {
                         }
 
                         try {
-                            installApk(File(path))
-                            result.success(null)
+                            result.success(installApk(File(path)))
                         } catch (error: InstallPermissionRequiredException) {
                             result.error(
                                 ERROR_INSTALL_PERMISSION_REQUIRED,
@@ -169,6 +202,60 @@ class MainActivity : FlutterActivity() {
                         } catch (error: Exception) {
                             result.error(
                                 ERROR_APP_UPDATE_FAILED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
+                        }
+                    }
+                    METHOD_DOWNLOAD_UPDATE_IN_BACKGROUND -> {
+                        val url = call.argument<String>(ARG_DOWNLOAD_URL)
+                        val destinationPath = call.argument<String>(ARG_DESTINATION_PATH)
+                        val rawHeaders = call.argument<Map<*, *>>(ARG_HEADERS)
+                        val expectedSize =
+                            call.argument<Number>(ARG_EXPECTED_SIZE)?.toLong() ?: 0L
+                        val checksum = call.argument<String>(ARG_CHECKSUM).orEmpty()
+                        if (url.isNullOrBlank() || destinationPath.isNullOrBlank()) {
+                            result.error(
+                                ERROR_BAD_ARGUMENTS,
+                                "Missing $ARG_DOWNLOAD_URL or $ARG_DESTINATION_PATH",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+                        if (pendingUpdateDownloadResult != null) {
+                            result.error(
+                                ERROR_UPDATE_DOWNLOAD_IN_PROGRESS,
+                                "已有更新正在下载",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+                        val headers = rawHeaders
+                            ?.entries
+                            ?.mapNotNull { entry ->
+                                val name = entry.key as? String
+                                val value = entry.value as? String
+                                if (name == null || value == null) null else name to value
+                            }
+                            ?.toMap()
+                            .orEmpty()
+                        try {
+                            pendingUpdateDownloadResult = result
+                            UpdateDownloadService.start(
+                                this,
+                                url,
+                                destinationPath,
+                                headers,
+                                expectedSize,
+                                checksum,
+                            )
+                        } catch (error: Exception) {
+                            pendingUpdateDownloadResult = null
+                            showUpdateDownloadFailed(
+                                error.message ?: "后台下载无法启动",
+                            )
+                            result.error(
+                                ERROR_UPDATE_DOWNLOAD_FAILED,
                                 error.message ?: error.javaClass.simpleName,
                                 error.javaClass.name,
                             )
@@ -237,19 +324,35 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
+        if (captureUpdateInstallIntent(intent)) {
+            if (activityResumed) {
+                resumePendingInstall()
+            }
+            return
+        }
+
         val mrp = importMrpFromIntent(intent) ?: return
         mrpOpenChannel?.invokeMethod(METHOD_OPEN_MRP, mrp.toFlutterMap())
     }
 
     override fun onResume() {
         super.onResume()
-        val apk = pendingInstallApk ?: return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            packageManager.canRequestPackageInstalls()
-        ) {
-            pendingInstallApk = null
-            openApkInstaller(apk)
+        activityResumed = true
+        resumePendingInstall()
+    }
+
+    override fun onPause() {
+        activityResumed = false
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (updateDownloadReceiverRegistered) {
+            unregisterReceiver(updateDownloadReceiver)
+            updateDownloadReceiverRegistered = false
         }
+        pendingUpdateDownloadResult = null
+        super.onDestroy()
     }
 
     override fun onRequestPermissionsResult(
@@ -418,9 +521,38 @@ class MainActivity : FlutterActivity() {
         return PackageInfoCompat.getLongVersionCode(info)
     }
 
-    private fun installApk(apk: File) {
+    private fun captureUpdateInstallIntent(intent: Intent?): Boolean {
+        if (intent?.action != UpdateDownloadService.ACTION_INSTALL_UPDATE) {
+            return false
+        }
+        val path = intent.getStringExtra(UpdateDownloadService.EXTRA_RESULT_PATH)
+        if (!path.isNullOrBlank()) {
+            pendingInstallApk = File(path)
+        }
+        intent.action = null
+        return true
+    }
+
+    private fun resumePendingInstall() {
+        val apk = pendingInstallApk ?: return
+        try {
+            installApk(apk)
+        } catch (_: InstallPermissionRequiredException) {
+            // The settings screen is already open; installation continues on resume.
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to resume update installation", error)
+            pendingInstallApk = null
+        }
+    }
+
+    private fun installApk(apk: File): Boolean {
         if (!apk.isFile) {
             error("APK not found: ${apk.absolutePath}")
+        }
+
+        if (!activityResumed) {
+            pendingInstallApk = apk
+            return false
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -438,7 +570,9 @@ class MainActivity : FlutterActivity() {
             )
         }
 
+        pendingInstallApk = null
         openApkInstaller(apk)
+        return true
     }
 
     private class InstallPermissionRequiredException(message: String) : Exception(message)
@@ -905,6 +1039,7 @@ class MainActivity : FlutterActivity() {
         const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
+        const val METHOD_DOWNLOAD_UPDATE_IN_BACKGROUND = "downloadUpdateInBackground"
         const val METHOD_ENSURE_DOWNLOAD_NOTIFICATION_PERMISSION =
             "ensureDownloadNotificationPermission"
         const val METHOD_OPEN_DOWNLOAD_NOTIFICATION_SETTINGS =
@@ -914,11 +1049,18 @@ class MainActivity : FlutterActivity() {
         const val METHOD_SHOW_DOWNLOAD_FAILED = "showDownloadFailed"
         const val METHOD_CANCEL_DOWNLOAD_NOTIFICATION = "cancelDownloadNotification"
         const val ARG_APK_PATH = "path"
+        const val ARG_DOWNLOAD_URL = "url"
+        const val ARG_DESTINATION_PATH = "destinationPath"
+        const val ARG_HEADERS = "headers"
+        const val ARG_EXPECTED_SIZE = "expectedSize"
+        const val ARG_CHECKSUM = "checksum"
         const val ARG_DOWNLOADED_BYTES = "downloadedBytes"
         const val ARG_TOTAL_BYTES = "totalBytes"
         const val ARG_MESSAGE = "message"
         const val ERROR_APP_UPDATE_FAILED = "APP_UPDATE_FAILED"
         const val ERROR_INSTALL_PERMISSION_REQUIRED = "INSTALL_PERMISSION_REQUIRED"
+        const val ERROR_UPDATE_DOWNLOAD_FAILED = "UPDATE_DOWNLOAD_FAILED"
+        const val ERROR_UPDATE_DOWNLOAD_IN_PROGRESS = "UPDATE_DOWNLOAD_IN_PROGRESS"
         const val UPDATE_NOTIFICATION_CHANNEL_ID = "app_update"
         const val UPDATE_NOTIFICATION_ID = 1001
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 2001

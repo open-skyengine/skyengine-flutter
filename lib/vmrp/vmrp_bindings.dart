@@ -24,6 +24,10 @@ typedef VmrpApiDestroyDart = void Function();
 
 typedef VmrpApiIsRunningC = Int32 Function();
 typedef VmrpApiIsRunningDart = int Function();
+typedef VmrpApiPauseC = Int32 Function();
+typedef VmrpApiPauseDart = int Function();
+typedef VmrpApiResumeC = Int32 Function();
+typedef VmrpApiResumeDart = int Function();
 
 typedef VmrpApiEventC = Int32 Function(Int32, Int32, Int32);
 typedef VmrpApiEventDart = int Function(int, int, int);
@@ -92,6 +96,8 @@ class VmrpBindings {
   late final VmrpApiSetDnsMapDart setDnsMap;
   late final VmrpApiDestroyDart destroy;
   late final VmrpApiIsRunningDart isRunning;
+  late final VmrpApiPauseDart pause;
+  late final VmrpApiResumeDart resume;
   late final VmrpApiEventDart event;
   late final VmrpApiTimerDart timer;
   late final VmrpApiGetTimerIntervalDart getTimerInterval;
@@ -141,6 +147,12 @@ class VmrpBindings {
     );
     isRunning = _lib.lookupFunction<VmrpApiIsRunningC, VmrpApiIsRunningDart>(
       'vmrp_api_is_running',
+    );
+    pause = _lib.lookupFunction<VmrpApiPauseC, VmrpApiPauseDart>(
+      'vmrp_api_pause',
+    );
+    resume = _lib.lookupFunction<VmrpApiResumeC, VmrpApiResumeDart>(
+      'vmrp_api_resume',
     );
     event = _lib.lookupFunction<VmrpApiEventC, VmrpApiEventDart>(
       'vmrp_api_event',

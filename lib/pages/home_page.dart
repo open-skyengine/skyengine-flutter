@@ -291,9 +291,9 @@ class _HomePageState extends State<HomePage> {
     if (workDir == null || _downloadingUpdate) {
       return;
     }
-    Future<void> pendingProgressNotification = Future<void>.value();
     var canShowDownloadNotification = false;
     var downloadStarted = false;
+    var backgroundDownloadStarted = false;
     try {
       canShowDownloadNotification = await _prepareDownloadNotification();
       if (!mounted) {
@@ -306,57 +306,35 @@ class _HomePageState extends State<HomePage> {
       final updatesDir = Directory(
         '${workDir.path}${Platform.pathSeparator}updates',
       );
-      var lastNotifiedPercent = -1;
-      var lastNotifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
-      Future<void> notifyProgress(int downloadedBytes, int totalBytes) async {
-        if (!canShowDownloadNotification) {
-          return;
-        }
-        final now = DateTime.now();
-        final percent = totalBytes > 0
-            ? (downloadedBytes * 100 ~/ totalBytes).clamp(0, 100)
-            : -1;
-        if (percent == lastNotifiedPercent &&
-            now.difference(lastNotifiedAt) < const Duration(seconds: 1)) {
-          return;
-        }
-        lastNotifiedPercent = percent;
-        lastNotifiedAt = now;
-        await _androidAppUpdate.showDownloadProgress(
-          downloadedBytes: downloadedBytes,
-          totalBytes: totalBytes,
-        );
+      final downloadRequest = await _appStoreClient
+          .prepareEmulatorVersionDownload(
+            version: version,
+            destinationDir: updatesDir,
+          );
+      if (!downloadRequest.alreadyDownloaded) {
+        backgroundDownloadStarted = true;
       }
-
-      void queueProgressNotification(int downloadedBytes, int totalBytes) {
-        if (!canShowDownloadNotification) {
-          return;
-        }
-        pendingProgressNotification = pendingProgressNotification
-            .then((_) => notifyProgress(downloadedBytes, totalBytes))
-            .catchError((Object error, StackTrace stackTrace) {
-              debugPrintStack(stackTrace: stackTrace);
-              debugPrint('Failed to update download notification: $error');
-            });
-        unawaited(pendingProgressNotification);
-      }
-
-      queueProgressNotification(0, version.fileSize);
-      final downloaded = await _appStoreClient.downloadEmulatorVersion(
-        version: version,
-        destinationDir: updatesDir,
-        onProgress: queueProgressNotification,
-      );
-      await pendingProgressNotification;
-      if (downloaded.alreadyDownloaded) {
+      final apkPath = downloadRequest.alreadyDownloaded
+          ? downloadRequest.target.path
+          : await _androidAppUpdate.downloadUpdateInBackground(
+              AndroidUpdateDownloadRequest(
+                uri: downloadRequest.uri,
+                destinationPath: downloadRequest.target.path,
+                headers: downloadRequest.headers,
+                expectedSize: downloadRequest.expectedSize,
+                checksum: downloadRequest.checksum,
+              ),
+            );
+      if (downloadRequest.alreadyDownloaded) {
         if (canShowDownloadNotification) {
           await _androidAppUpdate.cancelDownloadNotification();
         }
-      } else if (canShowDownloadNotification) {
-        await _androidAppUpdate.showDownloadComplete(downloaded.file.path);
       }
       try {
-        await _androidAppUpdate.installApk(downloaded.file.path);
+        final installerOpened = await _androidAppUpdate.installApk(apkPath);
+        if (!installerOpened) {
+          return;
+        }
       } on PlatformException catch (error) {
         if (error.code == 'INSTALL_PERMISSION_REQUIRED') {
           if (!mounted) {
@@ -376,8 +354,7 @@ class _HomePageState extends State<HomePage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('已打开安装程序')));
     } catch (e) {
-      await pendingProgressNotification;
-      if (canShowDownloadNotification) {
+      if (canShowDownloadNotification && !backgroundDownloadStarted) {
         await _androidAppUpdate.showDownloadFailed(e.toString());
       }
       if (!mounted) {
