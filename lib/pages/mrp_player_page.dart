@@ -148,7 +148,8 @@ class _EditTextDialogState extends State<_EditTextDialog> {
   }
 }
 
-class _MrpPlayerPageState extends State<MrpPlayerPage> {
+class _MrpPlayerPageState extends State<MrpPlayerPage>
+    with WidgetsBindingObserver {
   static const MethodChannel _hapticsChannel = MethodChannel(
     'skyengine/haptics',
   );
@@ -175,6 +176,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   late final String _title;
   VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
+  bool _appInForeground = true;
 
   double get _keypadReservedHeight {
     return switch (_keypadMode) {
@@ -188,6 +190,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _hardwareKeysChannel.setMethodCallHandler(_handleHardwareKeyCall);
     unawaited(_setHardwareKeyCapture(true));
     _currentResolution = MrpResolution(widget.screenWidth, widget.screenHeight);
@@ -307,6 +310,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
       }
     });
     setState(() => _engine = engine);
+    if (!_appInForeground) {
+      engine.pause();
+    }
     _keyboardFocusNode.requestFocus();
   }
 
@@ -325,6 +331,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _hardwareKeysChannel.setMethodCallHandler(null);
     unawaited(_setHardwareKeyCapture(false));
     if (_isFullscreen) {
@@ -333,6 +340,26 @@ class _MrpPlayerPageState extends State<MrpPlayerPage> {
     _shutdownEngine();
     _keyboardFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final engine = _engine;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _appInForeground = true;
+        engine?.resume();
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _appInForeground = false;
+        engine?.pause();
+      case AppLifecycleState.inactive:
+        // Android emits inactive briefly while opening system UI. Keep the VM
+        // alive until hidden/paused so notification and installer transitions
+        // do not interrupt a running MRP.
+        break;
+    }
   }
 
   Future<void> _handleHardwareKeyCall(MethodCall call) async {

@@ -65,6 +65,7 @@ class VmrpEngine {
   Pointer<Uint8>? _screenRgbaPtr;
   Uint8List? _screenRgbaView;
   bool _running = false;
+  bool _paused = false;
   bool _disposed = false;
   bool _editRequestActive = false;
   String? lastError;
@@ -185,6 +186,7 @@ class VmrpEngine {
 
       if (ret == 0) {
         _running = true;
+        _paused = false;
         _editRequestActive = false;
         if (_bindings!.isRunning() == 0) {
           scheduleMicrotask(_markExited);
@@ -233,33 +235,66 @@ class VmrpEngine {
   }
 
   void requestScreenRefresh() {
-    if (!_running || _onScreenUpdate.isClosed) return;
+    if (!_running || _paused || _onScreenUpdate.isClosed) return;
     _onScreenUpdate.add(null);
   }
 
   void sendTouchDown(int x, int y) {
-    if (!_running) return;
+    if (!_running || _paused) return;
     _bindings!.event(VmrpEvent.mouseDown, x, y);
   }
 
   void sendTouchUp(int x, int y) {
-    if (!_running) return;
+    if (!_running || _paused) return;
     _bindings!.event(VmrpEvent.mouseUp, x, y);
   }
 
   void sendTouchMove(int x, int y) {
-    if (!_running) return;
+    if (!_running || _paused) return;
     _bindings!.event(VmrpEvent.mouseMove, x, y);
   }
 
   void sendKeyDown(int keyCode) {
-    if (!_running) return;
+    if (!_running || _paused) return;
     _bindings!.event(VmrpEvent.keyPress, keyCode, 0);
   }
 
   void sendKeyUp(int keyCode) {
-    if (!_running) return;
+    if (!_running || _paused) return;
     _bindings!.event(VmrpEvent.keyRelease, keyCode, 0);
+  }
+
+  int pause() {
+    if (!_running || _bindings == null || _paused) return 0;
+    try {
+      final ret = _bindings!.pause();
+      if (ret == 0) {
+        _paused = true;
+        _statePollTimer?.cancel();
+        _statePollTimer = null;
+        unawaited(_audioPlayer?.stop() ?? Future<void>.value());
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_pause crashed: $e';
+      return -1;
+    }
+  }
+
+  int resume() {
+    if (!_running || _bindings == null || !_paused) return 0;
+    try {
+      final ret = _bindings!.resume();
+      if (ret == 0) {
+        _paused = false;
+        _scheduleStatePoll();
+        _wakeAudio();
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_resume crashed: $e';
+      return -1;
+    }
   }
 
   Uint8List? getScreenRGBA() {
@@ -300,6 +335,7 @@ class VmrpEngine {
     _statePollTimer?.cancel();
     _statePollTimer = null;
     _running = false;
+    _paused = false;
     _editRequestActive = false;
     unawaited(_audioPlayer?.dispose() ?? Future<void>.value());
     _audioPlayer = null;
@@ -313,7 +349,7 @@ class VmrpEngine {
   }
 
   void _checkState() {
-    if (_bindings == null) return;
+    if (_bindings == null || _paused) return;
     if (_bindings!.isRunning() == 0) {
       _markExited();
       return;
@@ -333,7 +369,9 @@ class VmrpEngine {
   }
 
   void _scheduleStatePoll() {
-    if (!_running || _bindings == null || _statePollTimer != null) return;
+    if (!_running || _paused || _bindings == null || _statePollTimer != null) {
+      return;
+    }
     _statePollTimer = Timer.periodic(_statePollInterval, (_) {
       if (!_running) return;
       _checkState();
@@ -341,7 +379,7 @@ class VmrpEngine {
   }
 
   void _wakeAudio() {
-    if (!_running) return;
+    if (!_running || _paused) return;
     try {
       _audioPlayer?.wake();
       final audioError = _audioPlayer?.lastError;

@@ -32,6 +32,22 @@ class DownloadNotificationPermissionStatus {
   }
 }
 
+class AndroidUpdateDownloadRequest {
+  final Uri uri;
+  final String destinationPath;
+  final Map<String, String> headers;
+  final int expectedSize;
+  final String checksum;
+
+  const AndroidUpdateDownloadRequest({
+    required this.uri,
+    required this.destinationPath,
+    required this.headers,
+    required this.expectedSize,
+    required this.checksum,
+  });
+}
+
 class AndroidAppUpdate {
   static const MethodChannel _channel = MethodChannel('skyengine/app_update');
 
@@ -45,11 +61,38 @@ class AndroidAppUpdate {
     return value;
   }
 
-  Future<void> installApk(String path) async {
+  Future<bool> installApk(String path) async {
     if (!Platform.isAndroid) {
-      return;
+      return true;
     }
-    await _channel.invokeMethod<void>('installApk', {'path': path});
+    final opened = await _channel.invokeMethod<bool>('installApk', {
+      'path': path,
+    });
+    return opened ?? true;
+  }
+
+  Future<String> downloadUpdateInBackground(
+    AndroidUpdateDownloadRequest request,
+  ) async {
+    if (!Platform.isAndroid) {
+      return request.destinationPath;
+    }
+    final result = await _channel
+        .invokeMethod<Map<dynamic, dynamic>>('downloadUpdateInBackground', {
+          'url': request.uri.toString(),
+          'destinationPath': request.destinationPath,
+          'headers': request.headers,
+          'expectedSize': request.expectedSize,
+          'checksum': request.checksum,
+        });
+    final path = result?['path'];
+    if (path is! String || path.isEmpty) {
+      throw PlatformException(
+        code: 'UPDATE_DOWNLOAD_FAILED',
+        message: '后台下载未返回更新包路径',
+      );
+    }
+    return path;
   }
 
   Future<DownloadNotificationPermissionStatus>

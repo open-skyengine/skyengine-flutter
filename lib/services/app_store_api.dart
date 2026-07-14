@@ -305,6 +305,24 @@ class DownloadedEmulatorApk {
   });
 }
 
+class AppStoreEmulatorDownloadRequest {
+  final Uri uri;
+  final File target;
+  final Map<String, String> headers;
+  final int expectedSize;
+  final String checksum;
+  final bool alreadyDownloaded;
+
+  const AppStoreEmulatorDownloadRequest({
+    required this.uri,
+    required this.target,
+    required this.headers,
+    required this.expectedSize,
+    required this.checksum,
+    required this.alreadyDownloaded,
+  });
+}
+
 class AppStoreApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -495,38 +513,25 @@ class AppStoreClient {
     required Directory destinationDir,
     DownloadProgressCallback? onProgress,
   }) async {
-    if (!await destinationDir.exists()) {
-      await destinationDir.create(recursive: true);
-    }
-
-    final target = File(
-      '${destinationDir.path}${Platform.pathSeparator}'
-      '${_emulatorApkFileName(version)}',
-    );
-    await _deleteStaleEmulatorApks(destinationDir, keep: target);
-
-    final downloadedApk = await _findDownloadedEmulatorApk(
+    final downloadRequest = await prepareEmulatorVersionDownload(
       version: version,
-      target: target,
+      destinationDir: destinationDir,
     );
-    if (downloadedApk != null) {
+    if (downloadRequest.alreadyDownloaded) {
       return DownloadedEmulatorApk(
-        file: downloadedApk,
+        file: downloadRequest.target,
         version: version,
         alreadyDownloaded: true,
       );
     }
 
-    final uri = version.downloadUrl == null
-        ? _buildUri('/emulator/versions/${version.id}/download', const {})
-        : _resolveApiUri(version.downloadUrl!);
-    final response = await _getResponse(uri);
+    final response = await _getResponse(downloadRequest.uri);
     if (response.statusCode != HttpStatus.ok) {
       final message = await _readError(response);
       throw AppStoreApiException(message, statusCode: response.statusCode);
     }
 
-    final tempFile = File('${target.path}.download');
+    final tempFile = File('${downloadRequest.target.path}.download');
 
     if (await tempFile.exists()) {
       await tempFile.delete();
@@ -544,10 +549,10 @@ class AppStoreClient {
       if (!await _hasExpectedEmulatorApkContents(tempFile, version)) {
         throw const AppStoreApiException('下载的更新包不完整或校验失败');
       }
-      if (await target.exists()) {
-        await target.delete();
+      if (await downloadRequest.target.exists()) {
+        await downloadRequest.target.delete();
       }
-      await tempFile.rename(target.path);
+      await tempFile.rename(downloadRequest.target.path);
     } catch (_) {
       if (await tempFile.exists()) {
         await tempFile.delete();
@@ -555,7 +560,42 @@ class AppStoreClient {
       rethrow;
     }
 
-    return DownloadedEmulatorApk(file: target, version: version);
+    return DownloadedEmulatorApk(
+      file: downloadRequest.target,
+      version: version,
+    );
+  }
+
+  Future<AppStoreEmulatorDownloadRequest> prepareEmulatorVersionDownload({
+    required AppStoreEmulatorVersion version,
+    required Directory destinationDir,
+  }) async {
+    if (!await destinationDir.exists()) {
+      await destinationDir.create(recursive: true);
+    }
+
+    final target = File(
+      '${destinationDir.path}${Platform.pathSeparator}'
+      '${_emulatorApkFileName(version)}',
+    );
+    await _deleteStaleEmulatorApks(destinationDir, keep: target);
+
+    final downloadedApk = await _findDownloadedEmulatorApk(
+      version: version,
+      target: target,
+    );
+    final uri = version.downloadUrl == null
+        ? _buildUri('/emulator/versions/${version.id}/download', const {})
+        : _resolveApiUri(version.downloadUrl!);
+
+    return AppStoreEmulatorDownloadRequest(
+      uri: uri,
+      target: downloadedApk ?? target,
+      headers: _signedGetHeaders(uri),
+      expectedSize: version.fileSize,
+      checksum: version.checksum,
+      alreadyDownloaded: downloadedApk != null,
+    );
   }
 
   Future<void> cleanupInstalledEmulatorUpdates({
@@ -906,18 +946,27 @@ class AppStoreClient {
   }
 
   Future<HttpClientResponse> _getResponse(Uri uri) async {
+    final headers = _signedGetHeaders(uri);
+    final request = await _httpClient.getUrl(uri);
+    headers.forEach(request.headers.set);
+    return request.close();
+  }
+
+  Map<String, String> _signedGetHeaders(Uri uri) {
     final timestamp = '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
     final nonce = _createNonce();
-    final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-    request.headers.set('X-App-Key', config.key);
-    request.headers.set('X-App-Timestamp', timestamp);
-    request.headers.set('X-App-Nonce', nonce);
-    request.headers.set(
-      'X-App-Signature',
-      _signature(method: 'GET', uri: uri, timestamp: timestamp, nonce: nonce),
-    );
-    return request.close();
+    return {
+      HttpHeaders.acceptHeader: 'application/json',
+      'X-App-Key': config.key,
+      'X-App-Timestamp': timestamp,
+      'X-App-Nonce': nonce,
+      'X-App-Signature': _signature(
+        method: 'GET',
+        uri: uri,
+        timestamp: timestamp,
+        nonce: nonce,
+      ),
+    };
   }
 
   Uri _buildUri(String path, Map<String, String> query) {
