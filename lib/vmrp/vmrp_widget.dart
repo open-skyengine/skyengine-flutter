@@ -22,7 +22,7 @@ class VmrpWidget extends StatefulWidget {
 }
 
 class _VmrpWidgetState extends State<VmrpWidget> {
-  StreamSubscription? _sub;
+  StreamSubscription<void>? _sub;
   ui.Image? _screenImage;
   int? _activePointer;
   Offset? _lastTouchPoint;
@@ -30,61 +30,89 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   bool _moveFlushScheduled = false;
   bool _screenUpdateInProgress = false;
   bool _screenUpdatePending = false;
+  int _engineEpoch = 0;
 
   VmrpEngine get engine => widget.engine;
 
   @override
   void initState() {
     super.initState();
-    _sub = engine.onScreenUpdate.listen((_) => _queueScreenUpdate());
+    _subscribeToEngine();
+  }
+
+  @override
+  void didUpdateWidget(covariant VmrpWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(oldWidget.engine, widget.engine)) {
+      return;
+    }
+
+    _sub?.cancel();
+    _sub = null;
+    _activePointer = null;
+    _lastTouchPoint = null;
+    _pendingMovePoint = null;
+    _screenImage?.dispose();
+    _screenImage = null;
+    _subscribeToEngine();
   }
 
   @override
   void dispose() {
+    _engineEpoch++;
     _sub?.cancel();
     _screenImage?.dispose();
     super.dispose();
   }
 
-  void _queueScreenUpdate() {
-    if (!mounted) return;
+  void _subscribeToEngine() {
+    final epoch = ++_engineEpoch;
+    _sub = engine.onScreenUpdate.listen((_) => _queueScreenUpdate(epoch));
+    // The engine may have rendered its first frame before this widget subscribes.
+    _queueScreenUpdate(epoch);
+  }
+
+  void _queueScreenUpdate(int epoch) {
+    if (!mounted || epoch != _engineEpoch) return;
     if (_screenUpdateInProgress) {
       _screenUpdatePending = true;
       return;
     }
     _screenUpdateInProgress = true;
-    unawaited(_processScreenUpdates());
+    unawaited(_processScreenUpdates(epoch));
   }
 
-  Future<void> _processScreenUpdates() async {
+  Future<void> _processScreenUpdates(int epoch) async {
     try {
       do {
         _screenUpdatePending = false;
-        await _updateScreen();
-      } while (mounted && _screenUpdatePending);
+        await _updateScreen(epoch);
+      } while (mounted && epoch == _engineEpoch && _screenUpdatePending);
     } finally {
       _screenUpdateInProgress = false;
       if (mounted && _screenUpdatePending) {
-        _queueScreenUpdate();
+        _queueScreenUpdate(_engineEpoch);
       }
     }
   }
 
-  Future<void> _updateScreen() async {
-    final rgba = engine.getScreenRGBA();
+  Future<void> _updateScreen(int epoch) async {
+    if (epoch != _engineEpoch) return;
+    final sourceEngine = engine;
+    final rgba = sourceEngine.getScreenRGBA();
     if (rgba == null) return;
 
     final completer = Completer<ui.Image>();
     ui.decodeImageFromPixels(
       rgba,
-      engine.screenWidth,
-      engine.screenHeight,
+      sourceEngine.screenWidth,
+      sourceEngine.screenHeight,
       ui.PixelFormat.rgba8888,
       (img) => completer.complete(img),
     );
 
     final img = await completer.future;
-    if (mounted) {
+    if (mounted && epoch == _engineEpoch && identical(sourceEngine, engine)) {
       setState(() {
         _screenImage?.dispose();
         _screenImage = img;
