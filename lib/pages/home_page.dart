@@ -314,6 +314,12 @@ class _HomePageState extends State<HomePage> {
       if (!downloadRequest.alreadyDownloaded) {
         backgroundDownloadStarted = true;
       }
+      if (canShowDownloadNotification && !downloadRequest.alreadyDownloaded) {
+        await _androidAppUpdate.showDownloadProgress(
+          downloadedBytes: 0,
+          totalBytes: downloadRequest.expectedSize,
+        );
+      }
       final apkPath = downloadRequest.alreadyDownloaded
           ? downloadRequest.target.path
           : await _androidAppUpdate.downloadUpdateInBackground(

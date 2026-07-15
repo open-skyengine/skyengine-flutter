@@ -74,14 +74,7 @@ class UpdateDownloadService : Service() {
         }
         request.tempFile.delete()
 
-        val connection = (URL(request.url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            useCaches = false
-            request.headers.forEach { (name, value) -> setRequestProperty(name, value) }
-        }
+        val connection = openDownloadConnection(request)
 
         try {
             val status = connection.responseCode
@@ -145,6 +138,46 @@ class UpdateDownloadService : Service() {
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun openDownloadConnection(request: DownloadRequest): HttpURLConnection {
+        var url = URL(request.url)
+        var redirectCount = 0
+
+        while (true) {
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                instanceFollowRedirects = false
+                useCaches = false
+                request.headers.forEach { (name, value) -> setRequestProperty(name, value) }
+            }
+
+            val status = connection.responseCode
+            if (!isRedirect(status)) {
+                return connection
+            }
+
+            val location = connection.getHeaderField("Location")
+            connection.disconnect()
+            if (location.isNullOrBlank()) {
+                error("下载跳转地址无效（HTTP $status）")
+            }
+            redirectCount += 1
+            if (redirectCount > MAX_REDIRECTS) {
+                error("下载跳转次数过多")
+            }
+            url = URL(url, location)
+        }
+    }
+
+    private fun isRedirect(status: Int): Boolean {
+        return status == HttpURLConnection.HTTP_MOVED_PERM ||
+            status == HttpURLConnection.HTTP_MOVED_TEMP ||
+            status == HttpURLConnection.HTTP_SEE_OTHER ||
+            status == HTTP_TEMPORARY_REDIRECT ||
+            status == HTTP_PERMANENT_REDIRECT
     }
 
     private fun checksumMatches(file: File, checksum: String): Boolean {
@@ -275,6 +308,7 @@ class UpdateDownloadService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
     }
 
     private fun ensureNotificationChannel() {
@@ -352,6 +386,9 @@ class UpdateDownloadService : Service() {
         private const val INSTALL_REQUEST_CODE = 3002
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
+        private const val MAX_REDIRECTS = 8
+        private const val HTTP_TEMPORARY_REDIRECT = 307
+        private const val HTTP_PERMANENT_REDIRECT = 308
         private const val BUFFER_SIZE = 64 * 1024
         private const val NOTIFY_INTERVAL_MS = 1_000L
         private val CHECKSUM_PATTERN =
