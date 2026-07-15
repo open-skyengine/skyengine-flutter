@@ -35,8 +35,8 @@ jobs:
       - name: Run tests
         run: flutter test
 
-  publish-dev:
-    name: Publish dev APK
+  publish-continuous:
+    name: Publish continuous APK
     runs-on: ubuntu-latest
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -76,26 +76,26 @@ jobs:
           } > android/key.properties
 
       - name: Build release APK
-        run: flutter build apk --release --build-name 1.0.10-dev --build-number ${{ github.run_number }}
+        run: flutter build apk --release --build-name 1.0.13-continuous --build-number ${{ github.run_number }}
 
-      - name: Prepare dev artifact
+      - name: Prepare continuous artifact
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-dev.apk
+          cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-continuous.apk
 
-      - name: Move dev tag
+      - name: Move continuous tag
         run: |
-          git tag --force dev "$GITHUB_SHA"
-          git push --force origin refs/tags/dev
+          git tag --force continuous "$GITHUB_SHA"
+          git push --force origin refs/tags/continuous
 
-      - name: Update dev release
+      - name: Update continuous release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: dev
-          name: Dev Build
+          tag_name: continuous
+          name: Continuous Build
           prerelease: true
           make_latest: false
-          files: dist/skyengine-dev.apk
+          files: dist/skyengine-continuous.apk
 
   publish-release:
     name: Publish release APK
