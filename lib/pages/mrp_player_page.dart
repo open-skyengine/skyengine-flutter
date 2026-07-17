@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/emulator_settings.dart';
+import '../services/emulator_runtime_config.dart';
 import '../services/local_mrp_files.dart';
 import '../models/mrp_resolution.dart';
 import '../vmrp/vmrp_engine.dart';
@@ -75,6 +76,7 @@ class MrpPlayerPage extends StatefulWidget {
   final String? dnsMap;
   final int screenWidth;
   final int screenHeight;
+  final EmulatorRuntimeConfigProvider runtimeConfigProvider;
 
   const MrpPlayerPage({
     super.key,
@@ -83,6 +85,7 @@ class MrpPlayerPage extends StatefulWidget {
     this.dnsMap,
     this.screenWidth = 240,
     this.screenHeight = 320,
+    this.runtimeConfigProvider = const BuiltInEmulatorRuntimeConfigProvider(),
   });
 
   @override
@@ -242,6 +245,23 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       return;
     }
 
+    EmulatorRuntimeConfig runtimeConfig;
+    try {
+      runtimeConfig = await emulatorRuntimeConfigForMrp(
+        widget.mrpPath,
+        provider: widget.runtimeConfigProvider,
+      );
+    } catch (error, stackTrace) {
+      // A future remote provider must not make a local MRP unplayable when
+      // its network/config service is unavailable.
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('Failed to resolve MRP runtime config: $error');
+      runtimeConfig = const EmulatorRuntimeConfig();
+    }
+    if (!mounted || _disposedEngine) {
+      return;
+    }
+
     debugPrint('[VMRP] mrpPath: ${widget.mrpPath}');
     debugPrint('[VMRP] file size: ${file.lengthSync()} bytes');
     final workDir = _workDirForMrp(widget.mrpPath);
@@ -274,6 +294,17 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     if (memoryRet != 0) {
       // 设置失败时引擎沿用默认内存，不阻断启动。
       debugPrint('[VMRP] set memory failed: ${engine.lastError}');
+    }
+
+    final deviceDateRet = engine.setDeviceDate(runtimeConfig.deviceDate);
+    debugPrint(
+      '[VMRP] setDeviceDate(${runtimeConfig.deviceDate}) returned '
+      '$deviceDateRet',
+    );
+    if (deviceDateRet != 0) {
+      // Keep the existing startup behavior for older native libraries while
+      // making the failure visible in logs. The native API validates dates.
+      debugPrint('[VMRP] set device date failed: ${engine.lastError}');
     }
 
     final imageModeRet = engine.setImageProcessingMode(_imageProcessingMode);

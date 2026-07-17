@@ -8,6 +8,9 @@ typedef VmrpApiInitDart = int Function(int, int);
 typedef VmrpApiSetMemoryC = Int32 Function(Int32);
 typedef VmrpApiSetMemoryDart = int Function(int);
 
+typedef VmrpApiSetDeviceDateC = Int32 Function(Pointer<Utf8>);
+typedef VmrpApiSetDeviceDateDart = int Function(Pointer<Utf8>);
+
 typedef VmrpApiSetWorkDirC = Int32 Function(Pointer<Utf8>);
 typedef VmrpApiSetWorkDirDart = int Function(Pointer<Utf8>);
 
@@ -91,6 +94,7 @@ class VmrpBindings {
 
   late final VmrpApiInitDart init;
   late final VmrpApiSetMemoryDart setMemory;
+  VmrpApiSetDeviceDateDart? setDeviceDate;
   late final VmrpApiSetWorkDirDart setWorkDir;
   late final VmrpApiStartDart start;
   late final VmrpApiSetDnsMapDart setDnsMap;
@@ -133,6 +137,16 @@ class VmrpBindings {
     setMemory = _lib.lookupFunction<VmrpApiSetMemoryC, VmrpApiSetMemoryDart>(
       'vmrp_api_set_memory',
     );
+    // Keep older packaged native libraries usable while they are being
+    // updated. The engine reports a failed date application to its caller.
+    try {
+      setDeviceDate = _lib
+          .lookupFunction<VmrpApiSetDeviceDateC, VmrpApiSetDeviceDateDart>(
+            'vmrp_api_set_device_date',
+          );
+    } catch (_) {
+      setDeviceDate = null;
+    }
     setWorkDir = _lib.lookupFunction<VmrpApiSetWorkDirC, VmrpApiSetWorkDirDart>(
       'vmrp_api_set_work_dir',
     );
