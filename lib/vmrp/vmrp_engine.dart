@@ -125,6 +125,37 @@ class VmrpEngine {
     }
   }
 
+  /// Sets the app-visible handset date for the next run.
+  ///
+  /// The native API accepts an ISO date (`YYYY-MM-DD`) or `host`. This must be
+  /// called after [init] and before [start].
+  int setDeviceDate(String date) {
+    if (!_ensureBindings()) return -1;
+    final setDeviceDate = _bindings!.setDeviceDate;
+    if (setDeviceDate == null) {
+      lastError = 'vmrp_api_set_device_date is unavailable';
+      return -1;
+    }
+    final normalizedDate = date.trim();
+    if (normalizedDate.isEmpty) {
+      lastError = 'Device date must not be empty';
+      return -1;
+    }
+    final pDate = normalizedDate.toNativeUtf8();
+    try {
+      final ret = setDeviceDate(pDate.cast());
+      if (ret != 0) {
+        lastError = 'vmrp_api_set_device_date returned $ret';
+      }
+      return ret;
+    } catch (e) {
+      lastError = 'vmrp_api_set_device_date crashed: $e';
+      return -1;
+    } finally {
+      malloc.free(pDate);
+    }
+  }
+
   int start(
     String mrpPath, {
     String ext = 'start.mr',
