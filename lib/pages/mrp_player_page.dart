@@ -613,11 +613,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       unawaited(_setSystemUiFullscreen(false));
     }
     _shutdownEngine();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    });
+    _schedulePlayerPop();
   }
 
   void _handleBack() {
@@ -630,7 +626,12 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       unawaited(_setSystemUiFullscreen(false));
     }
     _shutdownEngine();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _schedulePlayerPop();
+  }
+
+  void _schedulePlayerPop() {
+    // Engine exit events can arrive when no further frame will be rendered.
+    scheduleMicrotask(() {
       if (mounted) {
         Navigator.of(context).pop();
       }

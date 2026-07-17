@@ -74,6 +74,52 @@ void main() {
     expect(find.text('全键'), findsOneWidget);
     expect(find.text('无键盘'), findsOneWidget);
   });
+
+  testWidgets('player close pops route without waiting for another frame', (
+    tester,
+  ) async {
+    final observer = _TestNavigatorObserver();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorObservers: [observer],
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                PageRouteBuilder(
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
+                  pageBuilder: (_, _, _) => MrpPlayerPage(
+                    mrpPath: 'missing.mrp',
+                  ),
+                ),
+              );
+            },
+            child: const Text('打开播放器'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开播放器'));
+    await tester.pump();
+
+    final poppedBeforeClose = observer.popCount;
+    await tester.tap(find.byType(BackButton));
+    await tester.idle();
+
+    expect(observer.popCount, poppedBeforeClose + 1);
+  });
+}
+
+class _TestNavigatorObserver extends NavigatorObserver {
+  int popCount = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    popCount++;
+    super.didPop(route, previousRoute);
+  }
 }
 
 Future<File> _writeMrpHeader(
