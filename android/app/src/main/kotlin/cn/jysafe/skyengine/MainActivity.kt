@@ -174,6 +174,31 @@ class MainActivity : FlutterActivity() {
                             )
                         }
                     }
+                    METHOD_VIBRATE -> {
+                        val durationMs = (call.arguments as? Number)?.toLong()
+                        if (durationMs == null || durationMs <= 0L) {
+                            result.error(
+                                ERROR_BAD_ARGUMENTS,
+                                "Vibration duration must be positive",
+                                call.arguments,
+                            )
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            vibrate(durationMs)
+                            result.success(null)
+                        } catch (error: Exception) {
+                            result.error(
+                                ERROR_VIBRATION_FAILED,
+                                error.message ?: error.javaClass.simpleName,
+                                error.javaClass.name,
+                            )
+                        }
+                    }
+                    METHOD_CANCEL_VIBRATION -> {
+                        getVibrator()?.cancel()
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -443,6 +468,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        getVibrator()?.cancel()
         mrpOpenChannel?.setMethodCallHandler(null)
         mrpOpenChannel = null
         hardwareKeysChannel?.setMethodCallHandler(null)
@@ -1024,6 +1050,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun vibrate(durationMs: Long) {
+        val vibrator = getVibrator() ?: return
+        if (!vibrator.hasVibrator()) {
+            return
+        }
+
+        vibrator.cancel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    durationMs,
+                    VibrationEffect.DEFAULT_AMPLITUDE,
+                ),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(durationMs)
+        }
+    }
+
     private fun setVmrpScreenRotation(rotation: Int, landscape: Boolean) {
         vmrpLandscape = landscape
         val targetOrientation = when {
@@ -1190,6 +1236,8 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val HAPTICS_CHANNEL = "skyengine/haptics"
         const val METHOD_VIRTUAL_KEY_VIBRATE = "virtualKeyVibrate"
+        const val METHOD_VIBRATE = "vibrate"
+        const val METHOD_CANCEL_VIBRATION = "cancelVibration"
         const val ERROR_VIBRATION_FAILED = "VIBRATION_FAILED"
         const val HARDWARE_KEYS_CHANNEL = "skyengine/hardware_keys"
         const val METHOD_SET_HARDWARE_KEYS_ENABLED = "setEnabled"

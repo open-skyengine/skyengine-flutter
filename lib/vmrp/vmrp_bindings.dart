@@ -41,6 +41,9 @@ typedef VmrpApiMotionDart = int Function(int, int, int);
 typedef VmrpApiMotionActiveC = Int32 Function();
 typedef VmrpApiMotionActiveDart = int Function();
 
+typedef VmrpApiTakeShakeC = Int32 Function();
+typedef VmrpApiTakeShakeDart = int Function();
+
 typedef VmrpApiTimerC = Int32 Function();
 typedef VmrpApiTimerDart = int Function();
 
@@ -114,6 +117,7 @@ class VmrpBindings {
   late final VmrpApiEventDart event;
   VmrpApiMotionDart? motion;
   VmrpApiMotionActiveDart? motionActive;
+  VmrpApiTakeShakeDart? takeShake;
   late final VmrpApiTimerDart timer;
   late final VmrpApiGetTimerIntervalDart getTimerInterval;
   late final VmrpApiSetImageProcessingModeDart setImageProcessingMode;
@@ -195,6 +199,14 @@ class VmrpBindings {
       // Older packaged native libraries remain usable without motion support.
       motion = null;
       motionActive = null;
+    }
+    try {
+      takeShake = _lib.lookupFunction<VmrpApiTakeShakeC, VmrpApiTakeShakeDart>(
+        'vmrp_api_take_shake',
+      );
+    } catch (_) {
+      // Older packaged native libraries remain usable without vibration.
+      takeShake = null;
     }
     timer = _lib.lookupFunction<VmrpApiTimerC, VmrpApiTimerDart>(
       'vmrp_api_timer',
