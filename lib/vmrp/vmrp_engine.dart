@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 import 'vmrp_audio_player.dart';
 import 'vmrp_bindings.dart';
+import 'vmrp_motion_sensor.dart';
 
 class VmrpEvent {
   static const int keyPress = 0;
@@ -62,6 +63,7 @@ class VmrpEngine {
 
   Timer? _statePollTimer;
   VmrpAudioPlayer? _audioPlayer;
+  VmrpMotionBridge? _motionBridge;
   Pointer<Uint8>? _screenRgbaPtr;
   Uint8List? _screenRgbaView;
   bool _running = false;
@@ -79,7 +81,19 @@ class VmrpEngine {
   final StreamController<void> _onExit = StreamController.broadcast();
   Stream<void> get onExit => _onExit.stream;
 
-  VmrpEngine({this.screenWidth = 240, this.screenHeight = 320});
+  VmrpEngine({
+    this.screenWidth = 240,
+    this.screenHeight = 320,
+    VmrpMotionSampleStreamFactory? motionSampleStreamFactory,
+  }) {
+    if (motionSampleStreamFactory != null) {
+      _motionBridge = VmrpMotionBridge(
+        streamFactory: motionSampleStreamFactory,
+        onSample: _sendMotionSample,
+        onError: _handleMotionSensorError,
+      );
+    }
+  }
 
   bool _ensureBindings() {
     if (_disposed) {
@@ -219,6 +233,7 @@ class VmrpEngine {
         _running = true;
         _paused = false;
         _editRequestActive = false;
+        _syncMotionSensor();
         if (_bindings!.isRunning() == 0) {
           scheduleMicrotask(_markExited);
         } else {
@@ -296,6 +311,7 @@ class VmrpEngine {
   }
 
   int pause() {
+    _motionBridge?.setEnabled(false);
     if (!_running || _bindings == null || _paused) return 0;
     try {
       final ret = _bindings!.pause();
@@ -318,6 +334,7 @@ class VmrpEngine {
       final ret = _bindings!.resume();
       if (ret == 0) {
         _paused = false;
+        _syncMotionSensor();
         _scheduleStatePoll();
         _wakeAudio();
       }
@@ -368,6 +385,8 @@ class VmrpEngine {
     _running = false;
     _paused = false;
     _editRequestActive = false;
+    _motionBridge?.dispose();
+    _motionBridge = null;
     unawaited(_audioPlayer?.dispose() ?? Future<void>.value());
     _audioPlayer = null;
     _bindings?.destroy();
@@ -395,6 +414,7 @@ class VmrpEngine {
     } else if (!editActive) {
       _editRequestActive = false;
     }
+    _syncMotionSensor();
     _wakeAudio();
     _scheduleStatePoll();
   }
@@ -422,12 +442,46 @@ class VmrpEngine {
     }
   }
 
+  void _syncMotionSensor() {
+    final bridge = _motionBridge;
+    final bindings = _bindings;
+    final motion = bindings?.motion;
+    final motionActive = bindings?.motionActive;
+    if (bridge == null) return;
+    if (!_running || _paused || motion == null || motionActive == null) {
+      bridge.setEnabled(false);
+      return;
+    }
+
+    try {
+      bridge.setEnabled(motionActive() >= 0);
+    } catch (error) {
+      lastError = 'Motion state query failed: $error';
+      bridge.setEnabled(false);
+    }
+  }
+
+  void _sendMotionSample(VmrpMotionSample sample) {
+    final motion = _bindings?.motion;
+    if (!_running || _paused || motion == null) return;
+    try {
+      motion(sample.x, sample.y, sample.z);
+    } catch (error) {
+      lastError = 'Motion input failed: $error';
+    }
+  }
+
+  void _handleMotionSensorError(Object error, StackTrace stackTrace) {
+    lastError = 'Motion sensor failed: $error';
+  }
+
   void _markExited() {
     if (!_running) return;
     _statePollTimer?.cancel();
     _statePollTimer = null;
     _running = false;
     _editRequestActive = false;
+    _motionBridge?.setEnabled(false);
     unawaited(_audioPlayer?.stop() ?? Future<void>.value());
     if (!_onExit.isClosed) {
       _onExit.add(null);
