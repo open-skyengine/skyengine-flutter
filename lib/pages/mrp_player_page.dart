@@ -7,6 +7,7 @@ import '../services/emulator_runtime_config.dart';
 import '../services/local_mrp_files.dart';
 import '../models/mrp_resolution.dart';
 import '../vmrp/vmrp_engine.dart';
+import '../vmrp/vmrp_motion_sensor.dart';
 import '../vmrp/vmrp_widget.dart';
 
 String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
@@ -277,6 +278,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     final engine = VmrpEngine(
       screenWidth: _currentResolution.width,
       screenHeight: _currentResolution.height,
+      motionSampleStreamFactory: Platform.isAndroid
+          ? androidMotionSampleStream
+          : null,
     );
 
     final initRet = engine.init();

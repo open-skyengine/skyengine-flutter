@@ -35,6 +35,12 @@ typedef VmrpApiResumeDart = int Function();
 typedef VmrpApiEventC = Int32 Function(Int32, Int32, Int32);
 typedef VmrpApiEventDart = int Function(int, int, int);
 
+typedef VmrpApiMotionC = Int32 Function(Int32, Int32, Int32);
+typedef VmrpApiMotionDart = int Function(int, int, int);
+
+typedef VmrpApiMotionActiveC = Int32 Function();
+typedef VmrpApiMotionActiveDart = int Function();
+
 typedef VmrpApiTimerC = Int32 Function();
 typedef VmrpApiTimerDart = int Function();
 
@@ -103,6 +109,8 @@ class VmrpBindings {
   late final VmrpApiPauseDart pause;
   late final VmrpApiResumeDart resume;
   late final VmrpApiEventDart event;
+  VmrpApiMotionDart? motion;
+  VmrpApiMotionActiveDart? motionActive;
   late final VmrpApiTimerDart timer;
   late final VmrpApiGetTimerIntervalDart getTimerInterval;
   late final VmrpApiSetImageProcessingModeDart setImageProcessingMode;
@@ -171,6 +179,19 @@ class VmrpBindings {
     event = _lib.lookupFunction<VmrpApiEventC, VmrpApiEventDart>(
       'vmrp_api_event',
     );
+    try {
+      motion = _lib.lookupFunction<VmrpApiMotionC, VmrpApiMotionDart>(
+        'vmrp_api_motion',
+      );
+      motionActive = _lib
+          .lookupFunction<VmrpApiMotionActiveC, VmrpApiMotionActiveDart>(
+            'vmrp_api_motion_active',
+          );
+    } catch (_) {
+      // Older packaged native libraries remain usable without motion support.
+      motion = null;
+      motionActive = null;
+    }
     timer = _lib.lookupFunction<VmrpApiTimerC, VmrpApiTimerDart>(
       'vmrp_api_timer',
     );
