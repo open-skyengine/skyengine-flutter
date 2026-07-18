@@ -93,6 +93,25 @@ void main() {
       await tempDir.delete(recursive: true);
     }
   });
+
+  test('calculateHash returns a stable SHA-256 hash', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'skyengine_local_files_test_',
+    );
+
+    try {
+      final mrp = await File(
+        '${tempDir.path}${Platform.pathSeparator}demo.mrp',
+      ).writeAsString('MRP-DATA');
+
+      expect(
+        await LocalMrpFiles().calculateHash(mrp.path),
+        'f5cb7536cb29a20a74f7dfb0a7c20e70db07f51a5fc17d2c606d62b1c5882174',
+      );
+    } finally {
+      await tempDir.delete(recursive: true);
+    }
+  });
 }
 
 Future<File> _writeMrpFile(
