@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:charset/charset.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gbk_codec/gbk_codec.dart';
 import 'package:skyengine/services/local_mrp_files.dart';
 
 void main() {
@@ -143,6 +143,6 @@ Uint8List _mrpHeader({
 }
 
 void _writeGbkField(Uint8List bytes, int offset, int length, String value) {
-  final encoded = gbk_bytes.encode(value);
+  final encoded = gbk.encode(value);
   bytes.setAll(offset, encoded.take(length));
 }
