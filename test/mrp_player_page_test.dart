@@ -75,6 +75,23 @@ void main() {
     expect(find.text('无键盘'), findsOneWidget);
   });
 
+  testWidgets('landscape hides header but keeps back and more controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(home: MrpPlayerPage(mrpPath: 'missing.mrp')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byTooltip('返回'), findsOneWidget);
+    expect(find.byTooltip('更多'), findsOneWidget);
+  });
+
   testWidgets('player close pops route without waiting for another frame', (
     tester,
   ) async {
@@ -90,9 +107,8 @@ void main() {
                 PageRouteBuilder(
                   transitionDuration: Duration.zero,
                   reverseTransitionDuration: Duration.zero,
-                  pageBuilder: (_, _, _) => MrpPlayerPage(
-                    mrpPath: 'missing.mrp',
-                  ),
+                  pageBuilder: (_, _, _) =>
+                      MrpPlayerPage(mrpPath: 'missing.mrp'),
                 ),
               );
             },
@@ -105,7 +121,7 @@ void main() {
     await tester.pump();
 
     final poppedBeforeClose = observer.popCount;
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byKey(const ValueKey('mrp-player-back')));
     await tester.idle();
 
     expect(observer.popCount, poppedBeforeClose + 1);

@@ -68,6 +68,9 @@ typedef VmrpApiGetScreenWidthDart = int Function();
 typedef VmrpApiGetScreenHeightC = Int32 Function();
 typedef VmrpApiGetScreenHeightDart = int Function();
 
+typedef VmrpApiGetScreenRotationC = Int32 Function();
+typedef VmrpApiGetScreenRotationDart = int Function();
+
 typedef VmrpApiAudioSampleRateC = Int32 Function();
 typedef VmrpApiAudioSampleRateDart = int Function();
 
@@ -120,6 +123,7 @@ class VmrpBindings {
   late final VmrpApiGetScreenDirtyDart getScreenDirty;
   late final VmrpApiGetScreenWidthDart getScreenWidth;
   late final VmrpApiGetScreenHeightDart getScreenHeight;
+  VmrpApiGetScreenRotationDart? getScreenRotation;
   late final VmrpApiAudioSampleRateDart audioSampleRate;
   late final VmrpApiAudioChannelsDart audioChannels;
   late final VmrpApiAudioIsActiveDart audioIsActive;
@@ -230,6 +234,15 @@ class VmrpBindings {
         .lookupFunction<VmrpApiGetScreenHeightC, VmrpApiGetScreenHeightDart>(
           'vmrp_api_get_screen_height',
         );
+    try {
+      getScreenRotation = _lib
+          .lookupFunction<
+            VmrpApiGetScreenRotationC,
+            VmrpApiGetScreenRotationDart
+          >('vmrp_api_get_screen_rotation');
+    } catch (_) {
+      getScreenRotation = null;
+    }
     audioSampleRate = _lib
         .lookupFunction<VmrpApiAudioSampleRateC, VmrpApiAudioSampleRateDart>(
           'vmrp_api_audio_sample_rate',
