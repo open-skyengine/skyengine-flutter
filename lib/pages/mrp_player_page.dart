@@ -78,6 +78,7 @@ class MrpPlayerPage extends StatefulWidget {
   final String? dnsMap;
   final int screenWidth;
   final int screenHeight;
+  final ValueChanged<String>? onResolutionChanged;
   final EmulatorRuntimeConfigProvider runtimeConfigProvider;
 
   const MrpPlayerPage({
@@ -87,6 +88,7 @@ class MrpPlayerPage extends StatefulWidget {
     this.dnsMap,
     this.screenWidth = 240,
     this.screenHeight = 320,
+    this.onResolutionChanged,
     this.runtimeConfigProvider = const BuiltInEmulatorRuntimeConfigProvider(),
   });
 
@@ -822,6 +824,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       _currentResolution = resolution;
       _error = null;
     });
+    widget.onResolutionChanged?.call(resolution.label);
     unawaited(_setHardwareKeyCapture(true));
     Future.delayed(Duration.zero, _startEngine);
     _keyboardFocusNode.requestFocus();

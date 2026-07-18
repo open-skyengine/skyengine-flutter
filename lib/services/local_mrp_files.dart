@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:charset/charset.dart';
+import 'package:crypto/crypto.dart';
 
 class LocalMrpFile {
   final String path;
@@ -65,16 +66,25 @@ class LocalMrpFiles {
               !_hiddenMrpPaths.contains(fileListKey(e.path)),
         )
         .toList();
+    return readFiles(files.map((file) => file.path));
+  }
+
+  List<LocalMrpFile> readFiles(Iterable<String> paths) {
+    final files = paths.map(readFile).whereType<LocalMrpFile>().toList();
     files.sort((a, b) => fileName(a.path).compareTo(fileName(b.path)));
-    return files
-        .map(
-          (entity) => LocalMrpFile(
-            path: entity.path,
-            fileName: fileName(entity.path),
-            metadata: readMetadata(entity.path),
-          ),
-        )
-        .toList();
+    return files;
+  }
+
+  LocalMrpFile? readFile(String path) {
+    final file = File(path);
+    if (!file.existsSync() || !path.toLowerCase().endsWith('.mrp')) {
+      return null;
+    }
+    return LocalMrpFile(
+      path: file.absolute.path,
+      fileName: fileName(path),
+      metadata: readMetadata(path),
+    );
   }
 
   void hide(String path) {
@@ -98,6 +108,11 @@ class LocalMrpFiles {
   String fileListKey(String path) => File(path).absolute.path;
 
   String fileName(String path) => path.split(Platform.pathSeparator).last;
+
+  Future<String> calculateHash(String path) async {
+    final digest = await sha256.bind(File(path).openRead()).first;
+    return digest.toString();
+  }
 
   MrpMetadata readMetadata(String path) {
     try {

@@ -75,6 +75,34 @@ void main() {
     expect(find.text('无键盘'), findsOneWidget);
   });
 
+  testWidgets('switching resolution reports the selected resolution', (
+    tester,
+  ) async {
+    final resolutions = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MrpPlayerPage(
+          mrpPath: 'missing.mrp',
+          onResolutionChanged: resolutions.add,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('切换分辨率'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('320x480'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(resolutions, ['320x480']);
+  });
+
   testWidgets('landscape hides header but keeps back and more controls', (
     tester,
   ) async {

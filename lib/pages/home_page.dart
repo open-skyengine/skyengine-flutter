@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/mrp_resolution.dart';
 import '../platform/android_app_update.dart';
 import '../platform/android_mythroad_assets.dart';
 import '../platform/android_mrp_open.dart';
 import '../services/app_store_api.dart';
+import '../services/local_mrp_database.dart';
 import '../services/local_mrp_files.dart';
 import 'more_page.dart';
 
@@ -28,10 +30,14 @@ typedef AppStoreBuilder =
     Widget Function(
       String? mrpDir,
       AppStoreRunMrp onRunMrp,
-      Future<void> Function() onDownloaded,
+      Future<void> Function(String path) onDownloaded,
     );
 typedef MrpPlayerBuilder =
-    Widget Function(MrpOpenRequest request, String? dnsMap);
+    Widget Function(
+      MrpOpenRequest request,
+      String? dnsMap,
+      ValueChanged<String> onResolutionChanged,
+    );
 
 Directory mrpDirectoryForWorkDir(Directory workDir) {
   return Directory('${workDir.path}${Platform.pathSeparator}mythroad');
@@ -44,6 +50,7 @@ class HomePage extends StatefulWidget {
   final MrpPlayerBuilder playerBuilder;
   final InitialMrpProvider initialMrpProvider;
   final OpenMrpStreamProvider openMrpStreamProvider;
+  final LocalMrpDatabase? localMrpDatabase;
   final bool enableStartupRemoteConfig;
   final bool enableStartupUpdateCheck;
 
@@ -55,6 +62,7 @@ class HomePage extends StatefulWidget {
     required this.playerBuilder,
     this.initialMrpProvider = _defaultInitialMrpProvider,
     this.openMrpStreamProvider = _defaultOpenMrpStreamProvider,
+    this.localMrpDatabase,
     this.enableStartupRemoteConfig = true,
     this.enableStartupUpdateCheck = true,
   });
@@ -77,6 +85,8 @@ enum _LocalMrpMenuAction { details }
 
 class _HomePageState extends State<HomePage> {
   final LocalMrpFiles _localFiles = LocalMrpFiles();
+  late final LocalMrpDatabase _mrpDatabase;
+  late final bool _ownsMrpDatabase;
   final AppStoreClient _appStoreClient = AppStoreClient(
     const AppStoreApiConfig(),
   );
@@ -95,6 +105,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _ownsMrpDatabase = widget.localMrpDatabase == null;
+    _mrpDatabase = widget.localMrpDatabase ?? LocalMrpDatabase();
     _loadMrpFiles();
     _mrpOpenSubscription = widget.openMrpStreamProvider().listen(
       _openImportedMrp,
@@ -113,6 +125,26 @@ class _HomePageState extends State<HomePage> {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('Failed to prepare Mythroad system assets: $error');
     }
+    await _mrpDatabase.open(
+      initialRecordsProvider: () async {
+        final initialRecords = <LocalMrpRecord>[];
+        for (final file in _localFiles.scan(mrpDir.path)) {
+          try {
+            initialRecords.add(
+              LocalMrpRecord(
+                path: file.path,
+                hash: await _localFiles.calculateHash(file.path),
+              ),
+            );
+          } catch (error, stackTrace) {
+            debugPrintStack(stackTrace: stackTrace);
+            debugPrint('Failed to hash local MRP ${file.path}: $error');
+          }
+        }
+        return initialRecords;
+      },
+    );
+    await _mrpDatabase.deleteMissingFiles();
     if (!mounted) {
       return;
     }
@@ -136,7 +168,8 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _refreshFileList() async {
     if (_mrpDir == null) return;
-    final files = _localFiles.scan(_mrpDir!);
+    final records = await _mrpDatabase.records();
+    final files = _localFiles.readFiles(records.map((record) => record.path));
     if (!mounted) {
       return;
     }
@@ -157,11 +190,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openImportedMrp(MrpOpenRequest request) async {
+    await _registerMrp(request.path, resolution: request.resolution);
     await _refreshFileList();
     if (!mounted) {
       return;
     }
-    _runMrpRequest(request);
+    await _runMrpRequest(request);
   }
 
   Future<void> _pickAndCopyMrp() async {
@@ -172,18 +206,62 @@ class _HomePageState extends State<HomePage> {
     final source = File(pickedFile.path);
     final dest = File('$_mrpDir/${pickedFile.name}');
     await source.copy(dest.path);
-    _localFiles.unhide(dest.path);
+    await _registerMrp(dest.path);
     await _refreshFileList();
   }
 
   void _runMrp(String path, {String? resolution}) {
-    _runMrpRequest(MrpOpenRequest(path: path, resolution: resolution));
+    unawaited(
+      _runMrpRequest(MrpOpenRequest(path: path, resolution: resolution)),
+    );
   }
 
-  void _runMrpRequest(MrpOpenRequest request) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => widget.playerBuilder(request, _dnsMap)),
+  Future<void> _runMrpRequest(MrpOpenRequest request) async {
+    var record = await _mrpDatabase.recordForPath(request.path);
+    if (record == null && await File(request.path).exists()) {
+      await _registerMrp(request.path, resolution: request.resolution);
+      record = await _mrpDatabase.recordForPath(request.path);
+    }
+
+    final requestedResolution = MrpResolution.tryParse(request.resolution);
+    final savedResolution = MrpResolution.tryParse(record?.resolution);
+    final resolution = requestedResolution ?? savedResolution;
+    if (resolution != null) {
+      await _mrpDatabase.updateResolution(request.path, resolution.label);
+    }
+    if (!mounted) {
+      return;
+    }
+    final effectiveRequest = MrpOpenRequest(
+      path: request.path,
+      resolution: resolution?.label,
     );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => widget.playerBuilder(effectiveRequest, _dnsMap, (
+          resolution,
+        ) {
+          unawaited(_mrpDatabase.updateResolution(request.path, resolution));
+        }),
+      ),
+    );
+  }
+
+  Future<void> _registerMrp(String path, {String? resolution}) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      return;
+    }
+    await _mrpDatabase.upsert(
+      path: file.absolute.path,
+      hash: await _localFiles.calculateHash(file.path),
+      resolution: MrpResolution.tryParse(resolution)?.label,
+    );
+  }
+
+  Future<void> _registerDownloadedMrp(String path) async {
+    await _registerMrp(path);
+    await _refreshFileList();
   }
 
   Future<void> _refreshRemoteConfig() async {
@@ -478,6 +556,9 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _mrpOpenSubscription?.cancel();
     _appStoreClient.close();
+    if (_ownsMrpDatabase) {
+      unawaited(_mrpDatabase.close());
+    }
     super.dispose();
   }
 
@@ -514,7 +595,10 @@ class _HomePageState extends State<HomePage> {
 
     switch (action) {
       case _MrpRemovalAction.removeFromList:
-        _removeMrpFromList(file.path);
+        await _removeMrpFromList(file.path);
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('已从列表移除：$name')));
@@ -523,10 +607,13 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _removeMrpFromList(String path) {
+  Future<void> _removeMrpFromList(String path) async {
     final key = _fileListKey(path);
+    await _mrpDatabase.delete(path);
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _localFiles.hide(path);
       _mrpFiles = _mrpFiles
           .where((file) => _localFiles.fileListKey(file.path) != key)
           .toList();
@@ -538,6 +625,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final existed = await _localFiles.deleteFile(path);
+      await _mrpDatabase.delete(path);
       await _refreshFileList();
       if (!mounted) {
         return;
@@ -658,7 +746,7 @@ class _HomePageState extends State<HomePage> {
           _buildLocalList(),
           Stack(
             children: [
-              widget.appStoreBuilder(_mrpDir, _runMrp, _refreshFileList),
+              widget.appStoreBuilder(_mrpDir, _runMrp, _registerDownloadedMrp),
               if (_downloadingUpdate)
                 const Positioned(
                   left: 0,

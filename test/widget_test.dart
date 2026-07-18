@@ -1,11 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skyengine/services/local_mrp_database.dart';
+import 'package:skyengine/services/local_mrp_files.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:skyengine/platform/android_mrp_open.dart';
 import 'package:skyengine/pages/home_page.dart';
 import 'package:skyengine/pages/mrp_player_page.dart';
 
 void main() {
+  setUpAll(sqfliteFfiInit);
+
   testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
     final tempDir = await tester.runAsync(
       () => Directory.systemTemp.createTemp('skyengine_home_page_test_'),
@@ -13,6 +18,11 @@ void main() {
     if (tempDir == null) {
       fail('Failed to create temp directory');
     }
+    final database = LocalMrpDatabase(
+      databaseFactory: databaseFactoryFfi,
+      databasePathProvider: () async =>
+          '${tempDir.path}${Platform.pathSeparator}$localMrpDatabaseFileName',
+    );
 
     try {
       await tester.pumpWidget(
@@ -24,6 +34,7 @@ void main() {
             playerBuilder: _buildTestPlayer,
             initialMrpProvider: () async => null,
             openMrpStreamProvider: () => const Stream<MrpOpenRequest>.empty(),
+            localMrpDatabase: database,
             enableStartupRemoteConfig: false,
             enableStartupUpdateCheck: false,
           ),
@@ -51,6 +62,7 @@ void main() {
       expect(find.text('调试'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
       await tester.runAsync(() => tempDir.delete(recursive: true));
     }
   });
@@ -129,16 +141,110 @@ void main() {
   test('home page import smoke', () {
     expect(HomePage, isNotNull);
   });
+
+  testWidgets('local MRP restores and updates resolution from database', (
+    tester,
+  ) async {
+    final tempDir = await tester.runAsync(
+      () => Directory.systemTemp.createTemp('skyengine_home_page_test_'),
+    );
+    if (tempDir == null) {
+      fail('Failed to create temp directory');
+    }
+    final database = LocalMrpDatabase(
+      databaseFactory: databaseFactoryFfi,
+      databasePathProvider: () async =>
+          '${tempDir.path}${Platform.pathSeparator}$localMrpDatabaseFileName',
+    );
+    late File mrp;
+    await tester.runAsync(() async {
+      final mrpDir = mrpDirectoryForWorkDir(tempDir);
+      await mrpDir.create(recursive: true);
+      mrp = await File(
+        '${mrpDir.path}${Platform.pathSeparator}demo.mrp',
+      ).writeAsString('MRP-DATA');
+      await database.open();
+      await database.upsert(
+        path: mrp.path,
+        hash: await LocalMrpFiles().calculateHash(mrp.path),
+        resolution: '320x480',
+      );
+    });
+    MrpOpenRequest? openedRequest;
+    ValueChanged<String>? updateResolution;
+
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(
+            workingDirectoryProvider: () async => tempDir,
+            pickMrpFile: () async => null,
+            appStoreBuilder: _buildTestAppStore,
+            playerBuilder: (request, dnsMap, onResolutionChanged) {
+              openedRequest = request;
+              updateResolution = onResolutionChanged;
+              return const Scaffold(body: Text('播放器'));
+            },
+            initialMrpProvider: () async => null,
+            openMrpStreamProvider: () => const Stream<MrpOpenRequest>.empty(),
+            localMrpDatabase: database,
+            enableStartupRemoteConfig: false,
+            enableStartupUpdateCheck: false,
+          ),
+        ),
+      );
+      for (
+        var attempt = 0;
+        attempt < 20 && find.text('demo').evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+
+      await tester.tap(find.text('demo'));
+      await tester.pump();
+      for (var attempt = 0; attempt < 20 && openedRequest == null; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(openedRequest?.resolution, '320x480');
+
+      expect(updateResolution, isNotNull);
+      updateResolution!('176x220');
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      final record = await tester.runAsync(
+        () => database.recordForPath(mrp.path),
+      );
+      expect(record?.resolution, '176x220');
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        await database.close();
+        await tempDir.delete(recursive: true);
+      });
+    }
+  });
 }
 
 Widget _buildTestAppStore(
   String? mrpDir,
   AppStoreRunMrp onRunMrp,
-  Future<void> Function() onDownloaded,
+  Future<void> Function(String path) onDownloaded,
 ) {
   return const Center(child: Text('搜索应用'));
 }
 
-Widget _buildTestPlayer(MrpOpenRequest request, String? dnsMap) {
+Widget _buildTestPlayer(
+  MrpOpenRequest request,
+  String? dnsMap,
+  ValueChanged<String> onResolutionChanged,
+) {
   return Scaffold(body: Text(request.path));
 }

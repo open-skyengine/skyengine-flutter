@@ -11,7 +11,7 @@ typedef RunMrpCallback = void Function(String path, {String? resolution});
 class AppStorePage extends StatefulWidget {
   final String? mrpDir;
   final RunMrpCallback onRunMrp;
-  final Future<void> Function() onDownloaded;
+  final Future<void> Function(String path) onDownloaded;
 
   const AppStorePage({
     super.key,
@@ -220,7 +220,7 @@ class _AppStorePageState extends State<AppStorePage> {
           setState(() => _downloadProgress[app.appId] = fraction);
         },
       );
-      await widget.onDownloaded();
+      await widget.onDownloaded(downloaded.file.path);
       if (!mounted) {
         return;
       }
@@ -456,9 +456,7 @@ class _AppStorePageState extends State<AppStorePage> {
           LinearProgressIndicator(value: progress),
           const SizedBox(height: 4),
           Text(
-            progress == null
-                ? '正在下载…'
-                : '正在下载 ${(progress * 100).floor()}%',
+            progress == null ? '正在下载…' : '正在下载 ${(progress * 100).floor()}%',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],

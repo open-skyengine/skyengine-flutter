@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -33,6 +34,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
 class MainActivity : FlutterActivity() {
@@ -499,23 +502,79 @@ class MainActivity : FlutterActivity() {
             return null
         }
 
+        val hash = sha256ForUri(uri) ?: return null
+        existingMrpPathForHash(hash)?.let { return it }
+
         val targetDir = File(getExternalFilesDir(null) ?: filesDir, MYTHROAD_DIR_NAME)
         if (!targetDir.exists() && !targetDir.mkdirs()) {
             error("Unable to create ${targetDir.absolutePath}")
         }
 
         val target = uniqueFile(targetDir, sanitizeFileName(displayName))
-        when (uri.scheme) {
-            "file" -> File(uri.path ?: return null).inputStream()
-            "content" -> contentResolver.openInputStream(uri)
-            else -> null
-        }?.use { input ->
+        openMrpInputStream(uri)?.use { input ->
             FileOutputStream(target).use { output ->
                 input.copyTo(output)
             }
         } ?: return null
 
         return target.absolutePath
+    }
+
+    private fun sha256ForUri(uri: Uri): String? {
+        val digest = MessageDigest.getInstance("SHA-256")
+        openMrpInputStream(uri)?.use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        } ?: return null
+        return digest.digest().joinToString("") { byte ->
+            "%02x".format(byte.toInt() and 0xff)
+        }
+    }
+
+    private fun openMrpInputStream(uri: Uri): InputStream? {
+        return when (uri.scheme) {
+            "file" -> File(uri.path ?: return null).inputStream()
+            "content" -> contentResolver.openInputStream(uri)
+            else -> null
+        }
+    }
+
+    private fun existingMrpPathForHash(hash: String): String? {
+        val databaseFile = File(filesDir, LOCAL_MRP_DATABASE_FILE_NAME)
+        if (!databaseFile.isFile) return null
+
+        return try {
+            SQLiteDatabase.openDatabase(
+                databaseFile.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READONLY,
+            ).use { database ->
+                database.query(
+                    LOCAL_MRP_TABLE,
+                    arrayOf(LOCAL_MRP_PATH_COLUMN),
+                    "$LOCAL_MRP_HASH_COLUMN = ?",
+                    arrayOf(hash),
+                    null,
+                    null,
+                    null,
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val path = cursor.getString(0)
+                        if (!path.isNullOrBlank() && File(path).isFile) {
+                            return path
+                        }
+                    }
+                }
+            }
+            null
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to query local MRP database", error)
+            null
+        }
     }
 
     private fun displayNameForUri(uri: Uri): String? {
@@ -1183,6 +1242,10 @@ class MainActivity : FlutterActivity() {
         const val MYTHROAD_DIR_NAME = "mythroad"
         const val MRP_EXTENSION = ".mrp"
         const val DEFAULT_MRP_FILE_NAME = "imported.mrp"
+        const val LOCAL_MRP_DATABASE_FILE_NAME = "local_mrp.db"
+        const val LOCAL_MRP_TABLE = "local_mrp_files"
+        const val LOCAL_MRP_PATH_COLUMN = "path"
+        const val LOCAL_MRP_HASH_COLUMN = "hash"
         val RESOLUTION_PATTERN = Regex("""^\d{2,5}\s*[xX]\s*\d{2,5}$""")
         const val ERROR_BAD_ARGUMENTS = "BAD_ARGUMENTS"
         const val ERROR_MYTHROAD_SYSTEM_FAILED = "MYTHROAD_SYSTEM_FAILED"
