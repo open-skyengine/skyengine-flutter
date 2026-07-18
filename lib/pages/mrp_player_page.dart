@@ -7,8 +7,10 @@ import '../services/emulator_runtime_config.dart';
 import '../services/local_mrp_files.dart';
 import '../models/mrp_resolution.dart';
 import '../platform/android_screen_orientation.dart';
+import '../platform/android_vibration.dart';
 import '../vmrp/vmrp_engine.dart';
 import '../vmrp/vmrp_motion_sensor.dart';
+import '../vmrp/vmrp_vibration.dart';
 import '../vmrp/vmrp_widget.dart';
 
 String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
@@ -177,6 +179,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   static const double _landscapeKeypadMaxWidth = 170;
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
+  final VmrpVibrationController _vmrpVibration = VmrpVibrationController(
+    vibrate: AndroidVibration.vibrate,
+    cancel: AndroidVibration.cancel,
+  );
   final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
   _KeypadMode _keypadMode = _KeypadMode.directional;
   String? _error;
@@ -346,6 +352,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         _showEditDialog();
       }
     });
+    engine.onShakeRequest.listen((request) {
+      if (identical(_engine, engine)) {
+        unawaited(_handleVmrpVibrationRequest(request));
+      }
+    });
     engine.onExit.listen((_) {
       if (identical(_engine, engine)) {
         _closePlayer();
@@ -370,6 +381,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     );
     if (!_appInForeground) {
       engine.pause();
+      unawaited(_cancelVmrpVibration());
     }
     _keyboardFocusNode.requestFocus();
   }
@@ -420,6 +432,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       case AppLifecycleState.detached:
         _appInForeground = false;
         engine?.pause();
+        unawaited(_cancelVmrpVibration());
       case AppLifecycleState.inactive:
         // Android emits inactive briefly while opening system UI. Keep the VM
         // alive until hidden/paused so notification and installer transitions
@@ -678,6 +691,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       return;
     }
     _disposedEngine = true;
+    unawaited(_cancelVmrpVibration());
     unawaited(_setHardwareKeyCapture(false));
     unawaited(AndroidScreenOrientation.clearVmrpRotation());
     _releasePressedKeyboardKeys();
@@ -687,6 +701,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   }
 
   void _disposeCurrentEngineForRestart() {
+    unawaited(_cancelVmrpVibration());
     unawaited(_setHardwareKeyCapture(false));
     _releasePressedKeyboardKeys();
     final engine = _engine;
@@ -899,6 +914,31 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     } catch (error, stackTrace) {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('[VMRP] virtual key vibration failed: $error');
+    }
+  }
+
+  Future<void> _handleVmrpVibrationRequest(int request) async {
+    try {
+      await _vmrpVibration.handleRequest(request);
+    } on PlatformException catch (error) {
+      debugPrint(
+        '[VMRP] vibration request failed: '
+        '${error.code}, ${error.message}, ${error.details}',
+      );
+    } on MissingPluginException catch (error) {
+      debugPrint('[VMRP] vibration channel missing: $error');
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[VMRP] vibration request failed: $error');
+    }
+  }
+
+  Future<void> _cancelVmrpVibration() async {
+    try {
+      await _vmrpVibration.cancel();
+    } catch (error, stackTrace) {
+      debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[VMRP] cancel vibration failed: $error');
     }
   }
 

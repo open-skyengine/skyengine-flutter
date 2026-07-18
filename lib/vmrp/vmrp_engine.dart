@@ -113,6 +113,9 @@ class VmrpEngine {
   final StreamController<void> _onEditRequest = StreamController.broadcast();
   Stream<void> get onEditRequest => _onEditRequest.stream;
 
+  final StreamController<int> _onShakeRequest = StreamController.broadcast();
+  Stream<int> get onShakeRequest => _onShakeRequest.stream;
+
   final StreamController<void> _onExit = StreamController.broadcast();
   Stream<void> get onExit => _onExit.stream;
 
@@ -365,6 +368,7 @@ class VmrpEngine {
         _paused = true;
         _statePollTimer?.cancel();
         _statePollTimer = null;
+        _discardShakeRequest();
         unawaited(_audioPlayer?.stop() ?? Future<void>.value());
       }
       return ret;
@@ -377,6 +381,7 @@ class VmrpEngine {
   int resume() {
     if (!_running || _bindings == null || !_paused) return 0;
     try {
+      _discardShakeRequest();
       final ret = _bindings!.resume();
       if (ret == 0) {
         _paused = false;
@@ -443,6 +448,7 @@ class VmrpEngine {
     _screenRgbaView = null;
     _onScreenUpdate.close();
     _onEditRequest.close();
+    _onShakeRequest.close();
     _onExit.close();
     _onScreenGeometryChanged.close();
   }
@@ -453,6 +459,7 @@ class VmrpEngine {
       _markExited();
       return;
     }
+    _syncShakeRequest();
     final screenDirty = _bindings!.getScreenDirty() != 0;
     final geometryChanged = _syncScreenGeometry();
     if (screenDirty || geometryChanged) {
@@ -490,6 +497,27 @@ class VmrpEngine {
       }
     } catch (e) {
       lastError = 'Audio wake failed: $e';
+    }
+  }
+
+  void _syncShakeRequest() {
+    final takeShake = _bindings?.takeShake;
+    if (takeShake == null || _onShakeRequest.isClosed) return;
+    try {
+      final request = takeShake();
+      if (request != 0) {
+        _onShakeRequest.add(request);
+      }
+    } catch (e) {
+      lastError = 'Vibration request query failed: $e';
+    }
+  }
+
+  void _discardShakeRequest() {
+    try {
+      _bindings?.takeShake?.call();
+    } catch (e) {
+      lastError = 'Vibration request discard failed: $e';
     }
   }
 
