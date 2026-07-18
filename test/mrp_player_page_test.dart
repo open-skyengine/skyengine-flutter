@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:charset/charset.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gbk_codec/gbk_codec.dart';
 import 'package:skyengine/models/mrp_resolution.dart';
 import 'package:skyengine/pages/mrp_player_page.dart';
 
@@ -109,6 +109,9 @@ void main() {
     await tester.idle();
 
     expect(observer.popCount, poppedBeforeClose + 1);
+
+    // Let Navigator remove the popped route before flutter_tester finalizes.
+    await tester.pumpAndSettle();
   });
 }
 
@@ -139,7 +142,7 @@ Future<File> _writeMrpHeader(
 }
 
 void _writeGbkField(List<int> bytes, int offset, int length, String value) {
-  final encoded = gbk_bytes.encode(value).take(length).toList();
+  final encoded = gbk.encode(value).take(length).toList();
   for (var i = 0; i < encoded.length; i++) {
     bytes[offset + i] = encoded[i];
   }
