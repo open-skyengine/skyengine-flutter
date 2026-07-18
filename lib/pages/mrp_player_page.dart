@@ -6,6 +6,7 @@ import '../services/emulator_settings.dart';
 import '../services/emulator_runtime_config.dart';
 import '../services/local_mrp_files.dart';
 import '../models/mrp_resolution.dart';
+import '../platform/android_screen_orientation.dart';
 import '../vmrp/vmrp_engine.dart';
 import '../vmrp/vmrp_motion_sensor.dart';
 import '../vmrp/vmrp_widget.dart';
@@ -168,6 +169,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   static const double _keypadRowGap = 10;
   static const double _keypadButtonWidth = 84;
   static const double _keypadButtonHeight = 44;
+  static const double _landscapeKeypadGap = 12;
+  static const double _landscapeKeypadColumnGap = 6;
+  static const double _landscapeKeypadMinWidth = 120;
+  static const double _landscapeKeypadMaxWidth = 170;
   VmrpEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
   final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
@@ -344,11 +349,35 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         _closePlayer();
       }
     });
+    engine.onScreenGeometryChanged.listen((geometry) {
+      if (identical(_engine, engine)) {
+        unawaited(
+          AndroidScreenOrientation.setVmrpRotation(
+            geometry.rotation,
+            landscape: _isLandscapeRotation(engine, geometry.rotation),
+          ),
+        );
+      }
+    });
     setState(() => _engine = engine);
+    unawaited(
+      AndroidScreenOrientation.setVmrpRotation(
+        engine.screenRotation,
+        landscape: _isLandscapeRotation(engine, engine.screenRotation),
+      ),
+    );
     if (!_appInForeground) {
       engine.pause();
     }
     _keyboardFocusNode.requestFocus();
+  }
+
+  bool _isLandscapeRotation(VmrpEngine engine, int rotation) {
+    if (engine.panelScreenWidth == engine.panelScreenHeight) {
+      return engine.screenWidth > engine.screenHeight;
+    }
+    final panelIsLandscape = engine.panelScreenWidth > engine.panelScreenHeight;
+    return panelIsLandscape != rotation.isOdd;
   }
 
   String _workDirForMrp(String mrpPath) {
@@ -648,6 +677,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     }
     _disposedEngine = true;
     unawaited(_setHardwareKeyCapture(false));
+    unawaited(AndroidScreenOrientation.clearVmrpRotation());
     _releasePressedKeyboardKeys();
     final engine = _engine;
     _engine = null;
@@ -871,6 +901,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return PopScope(
       canPop: !_isFullscreen,
       onPopInvokedWithResult: (didPop, result) {
@@ -883,7 +915,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         }
       },
       child: Scaffold(
-        appBar: _isFullscreen ? null : _buildAppBar(),
+        appBar: _isFullscreen || isLandscape ? null : _buildAppBar(),
         body: Focus(
           focusNode: _keyboardFocusNode,
           autofocus: true,
@@ -897,7 +929,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                     : Theme.of(context).scaffoldBackgroundColor,
                 child: _buildPlayerBody(),
               ),
-              if (_isFullscreen) _buildFullscreenExitButton(),
+              if (isLandscape)
+                _buildLandscapeNavigationControls()
+              else if (_isFullscreen)
+                _buildFullscreenExitButton(),
             ],
           ),
         ),
@@ -908,65 +943,105 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       title: Text(_title),
-      leading: BackButton(onPressed: _handleBack),
-      actions: [
-        PopupMenuButton<_PlayerMenuAction>(
-          tooltip: '更多',
-          icon: const Icon(Icons.more_vert),
-          onSelected: _handleMenuAction,
-          itemBuilder: (context) {
-            return [
-              PopupMenuItem(
-                value: _PlayerMenuAction.toggleFullscreen,
-                child: Row(
-                  children: [
-                    Icon(
-                      _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(_isFullscreen ? '退出全屏' : '进入全屏'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: _PlayerMenuAction.switchKeyboard,
-                child: Row(
-                  children: [
-                    Icon(
-                      _keypadMode == _KeypadMode.none
-                          ? Icons.keyboard_hide
-                          : Icons.keyboard,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('切换键盘'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: _PlayerMenuAction.switchResolution,
-                child: Row(
-                  children: [
-                    Icon(Icons.aspect_ratio),
-                    SizedBox(width: 12),
-                    Text('切换分辨率'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: _PlayerMenuAction.switchImageProcessing,
-                child: Row(
-                  children: [
-                    const Icon(Icons.image),
-                    const SizedBox(width: 12),
-                    Text('图像处理方式: ${_imageProcessingMode.label}'),
-                  ],
-                ),
-              ),
-            ];
-          },
-        ),
-      ],
+      leading: BackButton(
+        key: const ValueKey('mrp-player-back'),
+        onPressed: _handleBack,
+      ),
+      actions: [_buildMoreButton()],
     );
+  }
+
+  Widget _buildLandscapeNavigationControls() {
+    return Positioned.fill(
+      child: SafeArea(
+        minimum: const EdgeInsets.all(8),
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+                child: IconButton(
+                  key: const ValueKey('mrp-player-back'),
+                  tooltip: '返回',
+                  color: Colors.white,
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: _handleBack,
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.topRight,
+              child: Material(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+                child: _buildMoreButton(iconColor: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreButton({Color? iconColor}) {
+    return PopupMenuButton<_PlayerMenuAction>(
+      tooltip: '更多',
+      iconColor: iconColor,
+      icon: const Icon(Icons.more_vert),
+      onSelected: _handleMenuAction,
+      itemBuilder: (_) => _buildPlayerMenuItems(),
+    );
+  }
+
+  List<PopupMenuEntry<_PlayerMenuAction>> _buildPlayerMenuItems() {
+    return [
+      PopupMenuItem(
+        value: _PlayerMenuAction.toggleFullscreen,
+        child: Row(
+          children: [
+            Icon(_isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+            const SizedBox(width: 12),
+            Text(_isFullscreen ? '退出全屏' : '进入全屏'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: _PlayerMenuAction.switchKeyboard,
+        child: Row(
+          children: [
+            Icon(
+              _keypadMode == _KeypadMode.none
+                  ? Icons.keyboard_hide
+                  : Icons.keyboard,
+            ),
+            const SizedBox(width: 12),
+            const Text('切换键盘'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: _PlayerMenuAction.switchResolution,
+        child: Row(
+          children: [
+            Icon(Icons.aspect_ratio),
+            SizedBox(width: 12),
+            Text('切换分辨率'),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: _PlayerMenuAction.switchImageProcessing,
+        child: Row(
+          children: [
+            const Icon(Icons.image),
+            const SizedBox(width: 12),
+            Text('图像处理方式: ${_imageProcessingMode.label}'),
+          ],
+        ),
+      ),
+    ];
   }
 
   Widget _buildPlayerBody() {
@@ -996,38 +1071,208 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       return const Center(child: CircularProgressIndicator());
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final hasVirtualKeypad =
-            !_isFullscreen && _keypadMode != _KeypadMode.none;
-        final keypadHeight = hasVirtualKeypad ? _keypadReservedHeight : 0.0;
-        final gap = hasVirtualKeypad ? _keypadGap : 0.0;
-        final maxScreenWidth = constraints.maxWidth;
-        final maxScreenHeight = constraints.maxHeight - keypadHeight - gap;
-        final maxScale = _isFullscreen ? double.infinity : 2.0;
-        final scale = [
-          maxScreenWidth / _engine!.screenWidth,
-          maxScreenHeight > 0 ? maxScreenHeight / _engine!.screenHeight : 0.1,
-          maxScale,
-        ].reduce((a, b) => a < b ? a : b);
-        final screenWidth = _engine!.screenWidth * scale;
-        final screenHeight = _engine!.screenHeight * scale;
+    final engine = _engine!;
+    return StreamBuilder<VmrpScreenGeometry>(
+      stream: engine.onScreenGeometryChanged,
+      initialData: engine.screenGeometry,
+      builder: (context, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final hasVirtualKeypad =
+              !_isFullscreen && _keypadMode != _KeypadMode.none;
+          final usesLandscapeKeypad =
+              hasVirtualKeypad && engine.screenWidth > engine.screenHeight;
+          if (usesLandscapeKeypad) {
+            return _buildLandscapePlayer(engine, constraints);
+          }
 
-        return Align(
-          alignment: _isFullscreen ? Alignment.center : Alignment.topCenter,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              VmrpWidget(
-                engine: _engine!,
-                width: screenWidth,
-                height: screenHeight,
-              ),
-              if (hasVirtualKeypad) ...[SizedBox(height: gap), _buildKeypad()],
-            ],
-          ),
-        );
-      },
+          final keypadHeight = hasVirtualKeypad ? _keypadReservedHeight : 0.0;
+          final gap = hasVirtualKeypad ? _keypadGap : 0.0;
+          final maxScreenWidth = constraints.maxWidth;
+          final maxScreenHeight = constraints.maxHeight - keypadHeight - gap;
+          final maxScale = _isFullscreen ? double.infinity : 2.0;
+          final scale = [
+            maxScreenWidth / engine.screenWidth,
+            maxScreenHeight > 0 ? maxScreenHeight / engine.screenHeight : 0.1,
+            maxScale,
+          ].reduce((a, b) => a < b ? a : b);
+          final screenWidth = engine.screenWidth * scale;
+          final screenHeight = engine.screenHeight * scale;
+
+          return Align(
+            alignment: _isFullscreen ? Alignment.center : Alignment.topCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                VmrpWidget(
+                  engine: engine,
+                  width: screenWidth,
+                  height: screenHeight,
+                ),
+                if (hasVirtualKeypad) ...[
+                  SizedBox(height: gap),
+                  _buildKeypad(),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLandscapePlayer(VmrpEngine engine, BoxConstraints constraints) {
+    final sideWidth = (constraints.maxWidth * 0.2).clamp(
+      _landscapeKeypadMinWidth,
+      _landscapeKeypadMaxWidth,
+    );
+    final maxScreenWidth =
+        constraints.maxWidth - sideWidth * 2 - _landscapeKeypadGap * 2;
+    final maxScale = _isFullscreen ? double.infinity : 2.0;
+    final scale = [
+      maxScreenWidth > 0 ? maxScreenWidth / engine.screenWidth : 0.1,
+      constraints.maxHeight > 0
+          ? constraints.maxHeight / engine.screenHeight
+          : 0.1,
+      maxScale,
+    ].reduce((a, b) => a < b ? a : b);
+    final screenWidth = engine.screenWidth * scale;
+    final screenHeight = engine.screenHeight * scale;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildLandscapeKeypadSide(
+          width: sideWidth,
+          height: constraints.maxHeight,
+          child: _buildLandscapeLeftKeypad(sideWidth),
+        ),
+        const SizedBox(width: _landscapeKeypadGap),
+        VmrpWidget(engine: engine, width: screenWidth, height: screenHeight),
+        const SizedBox(width: _landscapeKeypadGap),
+        _buildLandscapeKeypadSide(
+          width: sideWidth,
+          height: constraints.maxHeight,
+          child: _buildLandscapeRightKeypad(sideWidth),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLandscapeKeypadSide({
+    required double width,
+    required double height,
+    required Widget child,
+  }) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: FittedBox(fit: BoxFit.scaleDown, child: child),
+    );
+  }
+
+  Widget _buildLandscapeLeftKeypad(double sideWidth) {
+    final threeColumnButtonWidth =
+        (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
+    final twoColumnButtonWidth = (sideWidth - _landscapeKeypadColumnGap) / 2;
+    return switch (_keypadMode) {
+      _KeypadMode.directional => _buildDirectionalPad(
+        buttonWidth: threeColumnButtonWidth,
+        columnGap: _landscapeKeypadColumnGap,
+      ),
+      _KeypadMode.numeric => _buildNumericKeypadHalf(const [
+        [('1', VmrpKey.key1), ('2', VmrpKey.key2)],
+        [('4', VmrpKey.key4), ('5', VmrpKey.key5)],
+        [('7', VmrpKey.key7), ('8', VmrpKey.key8)],
+        [('*', VmrpKey.star), ('0', VmrpKey.key0)],
+      ], buttonWidth: twoColumnButtonWidth),
+      _KeypadMode.full => _buildDirectionalKeypad(
+        buttonWidth: threeColumnButtonWidth,
+        columnGap: _landscapeKeypadColumnGap,
+      ),
+      _KeypadMode.none => const SizedBox.shrink(),
+    };
+  }
+
+  Widget _buildLandscapeRightKeypad(double sideWidth) {
+    final threeColumnButtonWidth =
+        (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
+    return switch (_keypadMode) {
+      _KeypadMode.directional => _buildSoftKeypad(),
+      _KeypadMode.numeric => _buildNumericKeypadHalf(const [
+        [('3', VmrpKey.key3)],
+        [('6', VmrpKey.key6)],
+        [('9', VmrpKey.key9)],
+        [('#', VmrpKey.pound)],
+      ], buttonWidth: threeColumnButtonWidth),
+      _KeypadMode.full => _buildNumericKeypad(
+        buttonWidth: threeColumnButtonWidth,
+        columnGap: _landscapeKeypadColumnGap,
+      ),
+      _KeypadMode.none => const SizedBox.shrink(),
+    };
+  }
+
+  Widget _buildDirectionalPad({
+    required double buttonWidth,
+    required double columnGap,
+  }) {
+    return SizedBox(
+      width: buttonWidth * 3 + columnGap * 2,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _keypadRow([
+            SizedBox(width: buttonWidth),
+            _keyButton('上', VmrpKey.up, width: buttonWidth),
+            SizedBox(width: buttonWidth),
+          ], columnGap: columnGap),
+          const SizedBox(height: _keypadRowGap),
+          _keypadRow([
+            _keyButton('左', VmrpKey.left, width: buttonWidth),
+            _keyButton('确定', VmrpKey.select, width: buttonWidth),
+            _keyButton('右', VmrpKey.right, width: buttonWidth),
+          ], columnGap: columnGap),
+          const SizedBox(height: _keypadRowGap),
+          _keypadRow([
+            SizedBox(width: buttonWidth),
+            _keyButton('下', VmrpKey.down, width: buttonWidth),
+            SizedBox(width: buttonWidth),
+          ], columnGap: columnGap),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSoftKeypad() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _keyButton('左软键', VmrpKey.softLeft),
+        const SizedBox(height: _keypadRowGap),
+        _keyButton('右软键', VmrpKey.softRight),
+      ],
+    );
+  }
+
+  Widget _buildNumericKeypadHalf(
+    List<List<(String, int)>> rows, {
+    required double buttonWidth,
+  }) {
+    return SizedBox(
+      width: buttonWidth * 2 + _landscapeKeypadColumnGap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            _keypadRow([
+              for (final key in rows[i])
+                _keyButton(key.$1, key.$2, width: buttonWidth),
+            ], columnGap: _landscapeKeypadColumnGap),
+            if (i < rows.length - 1) const SizedBox(height: _keypadRowGap),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1069,32 +1314,23 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _keypadRow(
-          [
-            _keyButton('左软键', VmrpKey.softLeft, width: buttonWidth),
-            _keyButton('上', VmrpKey.up, width: buttonWidth),
-            _keyButton('右软键', VmrpKey.softRight, width: buttonWidth),
-          ],
-          columnGap: columnGap,
-        ),
+        _keypadRow([
+          _keyButton('左软键', VmrpKey.softLeft, width: buttonWidth),
+          _keyButton('上', VmrpKey.up, width: buttonWidth),
+          _keyButton('右软键', VmrpKey.softRight, width: buttonWidth),
+        ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
-        _keypadRow(
-          [
-            _keyButton('左', VmrpKey.left, width: buttonWidth),
-            _keyButton('确定', VmrpKey.select, width: buttonWidth),
-            _keyButton('右', VmrpKey.right, width: buttonWidth),
-          ],
-          columnGap: columnGap,
-        ),
+        _keypadRow([
+          _keyButton('左', VmrpKey.left, width: buttonWidth),
+          _keyButton('确定', VmrpKey.select, width: buttonWidth),
+          _keyButton('右', VmrpKey.right, width: buttonWidth),
+        ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
-        _keypadRow(
-          [
-            SizedBox(width: buttonWidth),
-            _keyButton('下', VmrpKey.down, width: buttonWidth),
-            SizedBox(width: buttonWidth),
-          ],
-          columnGap: columnGap,
-        ),
+        _keypadRow([
+          SizedBox(width: buttonWidth),
+          _keyButton('下', VmrpKey.down, width: buttonWidth),
+          SizedBox(width: buttonWidth),
+        ], columnGap: columnGap),
       ],
     );
   }
@@ -1114,13 +1350,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final row in keys) ...[
-          _keypadRow(
-            [
-              for (final key in row)
-                _keyButton(key.$1, key.$2, width: buttonWidth),
-            ],
-            columnGap: columnGap,
-          ),
+          _keypadRow([
+            for (final key in row)
+              _keyButton(key.$1, key.$2, width: buttonWidth),
+          ], columnGap: columnGap),
           if (row != keys.last) const SizedBox(height: _keypadRowGap),
         ],
       ],
@@ -1136,10 +1369,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                       _fullKeypadColumnGap * 4) /
                   6
             : _keypadButtonWidth;
-        final buttonWidth = availableButtonWidth.clamp(
-          1.0,
-          _keypadButtonWidth,
-        );
+        final buttonWidth = availableButtonWidth.clamp(1.0, _keypadButtonWidth);
 
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,

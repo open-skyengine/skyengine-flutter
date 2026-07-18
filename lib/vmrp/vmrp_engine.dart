@@ -54,12 +54,47 @@ enum VmrpImageProcessingMode {
   }
 }
 
+class VmrpScreenGeometry {
+  final int width;
+  final int height;
+  final int rotation;
+
+  const VmrpScreenGeometry({
+    required this.width,
+    required this.height,
+    required this.rotation,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    return other is VmrpScreenGeometry &&
+        other.width == width &&
+        other.height == height &&
+        other.rotation == rotation;
+  }
+
+  @override
+  int get hashCode => Object.hash(width, height, rotation);
+}
+
 class VmrpEngine {
   static const Duration _statePollInterval = Duration(milliseconds: 16);
 
   VmrpBindings? _bindings;
-  final int screenWidth;
-  final int screenHeight;
+  final int panelScreenWidth;
+  final int panelScreenHeight;
+  int _screenWidth;
+  int _screenHeight;
+  int _screenRotation = 0;
+
+  int get screenWidth => _screenWidth;
+  int get screenHeight => _screenHeight;
+  int get screenRotation => _screenRotation;
+  VmrpScreenGeometry get screenGeometry => VmrpScreenGeometry(
+    width: _screenWidth,
+    height: _screenHeight,
+    rotation: _screenRotation,
+  );
 
   Timer? _statePollTimer;
   VmrpAudioPlayer? _audioPlayer;
@@ -81,11 +116,19 @@ class VmrpEngine {
   final StreamController<void> _onExit = StreamController.broadcast();
   Stream<void> get onExit => _onExit.stream;
 
+  final StreamController<VmrpScreenGeometry> _onScreenGeometryChanged =
+      StreamController.broadcast();
+  Stream<VmrpScreenGeometry> get onScreenGeometryChanged =>
+      _onScreenGeometryChanged.stream;
+
   VmrpEngine({
-    this.screenWidth = 240,
-    this.screenHeight = 320,
+    int screenWidth = 240,
+    int screenHeight = 320,
     VmrpMotionSampleStreamFactory? motionSampleStreamFactory,
-  }) {
+  }) : panelScreenWidth = screenWidth,
+       panelScreenHeight = screenHeight,
+       _screenWidth = screenWidth,
+       _screenHeight = screenHeight {
     if (motionSampleStreamFactory != null) {
       _motionBridge = VmrpMotionBridge(
         streamFactory: motionSampleStreamFactory,
@@ -114,9 +157,11 @@ class VmrpEngine {
   int init() {
     if (!_ensureBindings()) return -1;
     try {
-      final ret = _bindings!.init(screenWidth, screenHeight);
+      final ret = _bindings!.init(panelScreenWidth, panelScreenHeight);
       if (ret != 0) {
         lastError = 'vmrp_api_init returned $ret';
+      } else {
+        _syncScreenGeometry();
       }
       return ret;
     } catch (e) {
@@ -233,6 +278,7 @@ class VmrpEngine {
         _running = true;
         _paused = false;
         _editRequestActive = false;
+        _syncScreenGeometry();
         _syncMotionSensor();
         if (_bindings!.isRunning() == 0) {
           scheduleMicrotask(_markExited);
@@ -352,7 +398,9 @@ class VmrpEngine {
 
     if (_screenRgbaPtr != ptr || _screenRgbaView == null) {
       _screenRgbaPtr = ptr;
-      _screenRgbaView = ptr.asTypedList(screenWidth * screenHeight * 4);
+      _screenRgbaView = ptr.asTypedList(
+        panelScreenWidth * panelScreenHeight * 4,
+      );
     }
     return _screenRgbaView;
   }
@@ -396,6 +444,7 @@ class VmrpEngine {
     _onScreenUpdate.close();
     _onEditRequest.close();
     _onExit.close();
+    _onScreenGeometryChanged.close();
   }
 
   void _checkState() {
@@ -404,7 +453,9 @@ class VmrpEngine {
       _markExited();
       return;
     }
-    if (_bindings!.getScreenDirty() != 0) {
+    final screenDirty = _bindings!.getScreenDirty() != 0;
+    final geometryChanged = _syncScreenGeometry();
+    if (screenDirty || geometryChanged) {
       _onScreenUpdate.add(null);
     }
     final editActive = _bindings!.isEditActive() != 0;
@@ -439,6 +490,49 @@ class VmrpEngine {
       }
     } catch (e) {
       lastError = 'Audio wake failed: $e';
+    }
+  }
+
+  bool _syncScreenGeometry() {
+    final bindings = _bindings;
+    if (bindings == null) return false;
+
+    try {
+      final getRotation = bindings.getScreenRotation;
+      final rawRotationBefore = getRotation?.call() ?? 0;
+      final width = bindings.getScreenWidth();
+      final height = bindings.getScreenHeight();
+      final rawRotationAfter = getRotation?.call() ?? rawRotationBefore;
+      if (rawRotationBefore != rawRotationAfter) {
+        return false;
+      }
+      final rotation = rawRotationAfter >= 0 && rawRotationAfter <= 3
+          ? rawRotationAfter
+          : 0;
+      if (width <= 0 ||
+          height <= 0 ||
+          width * height != panelScreenWidth * panelScreenHeight) {
+        lastError = 'Invalid VMRP screen geometry: ${width}x$height';
+        return false;
+      }
+      if (width == _screenWidth &&
+          height == _screenHeight &&
+          rotation == _screenRotation) {
+        return false;
+      }
+
+      _screenWidth = width;
+      _screenHeight = height;
+      _screenRotation = rotation;
+      _screenRgbaPtr = null;
+      _screenRgbaView = null;
+      if (!_onScreenGeometryChanged.isClosed) {
+        _onScreenGeometryChanged.add(screenGeometry);
+      }
+      return true;
+    } catch (error) {
+      lastError = 'Screen geometry query failed: $error';
+      return false;
     }
   }
 

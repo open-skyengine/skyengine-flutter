@@ -23,6 +23,7 @@ class VmrpWidget extends StatefulWidget {
 
 class _VmrpWidgetState extends State<VmrpWidget> {
   StreamSubscription<void>? _sub;
+  StreamSubscription<VmrpScreenGeometry>? _geometrySub;
   ui.Image? _screenImage;
   int? _activePointer;
   Offset? _lastTouchPoint;
@@ -49,6 +50,8 @@ class _VmrpWidgetState extends State<VmrpWidget> {
 
     _sub?.cancel();
     _sub = null;
+    _geometrySub?.cancel();
+    _geometrySub = null;
     _activePointer = null;
     _lastTouchPoint = null;
     _pendingMovePoint = null;
@@ -61,6 +64,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   void dispose() {
     _engineEpoch++;
     _sub?.cancel();
+    _geometrySub?.cancel();
     _screenImage?.dispose();
     super.dispose();
   }
@@ -68,7 +72,20 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   void _subscribeToEngine() {
     final epoch = ++_engineEpoch;
     _sub = engine.onScreenUpdate.listen((_) => _queueScreenUpdate(epoch));
+    _geometrySub = engine.onScreenGeometryChanged.listen(
+      (_) => _handleScreenGeometryChanged(epoch),
+    );
     // The engine may have rendered its first frame before this widget subscribes.
+    _queueScreenUpdate(epoch);
+  }
+
+  void _handleScreenGeometryChanged(int epoch) {
+    if (!mounted || epoch != _engineEpoch) return;
+    _pendingMovePoint = null;
+    setState(() {
+      _screenImage?.dispose();
+      _screenImage = null;
+    });
     _queueScreenUpdate(epoch);
   }
 
@@ -99,20 +116,24 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   Future<void> _updateScreen(int epoch) async {
     if (epoch != _engineEpoch) return;
     final sourceEngine = engine;
+    final sourceGeometry = sourceEngine.screenGeometry;
     final rgba = sourceEngine.getScreenRGBA();
     if (rgba == null) return;
 
     final completer = Completer<ui.Image>();
     ui.decodeImageFromPixels(
       rgba,
-      sourceEngine.screenWidth,
-      sourceEngine.screenHeight,
+      sourceGeometry.width,
+      sourceGeometry.height,
       ui.PixelFormat.rgba8888,
       (img) => completer.complete(img),
     );
 
     final img = await completer.future;
-    if (mounted && epoch == _engineEpoch && identical(sourceEngine, engine)) {
+    if (mounted &&
+        epoch == _engineEpoch &&
+        identical(sourceEngine, engine) &&
+        sourceEngine.screenGeometry == sourceGeometry) {
       setState(() {
         _screenImage?.dispose();
         _screenImage = img;

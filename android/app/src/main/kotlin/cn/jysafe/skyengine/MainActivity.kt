@@ -9,6 +9,7 @@ import android.content.res.AssetManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -19,6 +20,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.view.KeyEvent
+import android.view.OrientationEventListener
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -37,6 +39,10 @@ class MainActivity : FlutterActivity() {
     private var mrpOpenChannel: MethodChannel? = null
     private var hardwareKeysChannel: MethodChannel? = null
     private var debugKeysChannel: MethodChannel? = null
+    private var screenOrientationChannel: MethodChannel? = null
+    private var vmrpLandscape = false
+    private var landscapeOrientationListener: OrientationEventListener? = null
+    private var appliedVmrpOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var initialMrpRequest: ImportedMrp? = null
     private var pendingInstallApk: File? = null
     private var pendingUpdateDownloadResult: MethodChannel.Result? = null
@@ -113,6 +119,37 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 METHOD_SET_DEBUG_KEYS_ENABLED -> {
                     debugKeyCaptureEnabled = call.arguments as? Boolean ?: false
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        screenOrientationChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            SCREEN_ORIENTATION_CHANNEL,
+        )
+        screenOrientationChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                METHOD_SET_VMRP_ROTATION -> {
+                    val arguments = call.arguments as? Map<*, *>
+                    val rotation = (arguments?.get("rotation") as? Number)?.toInt()
+                    val landscape = arguments?.get("landscape") as? Boolean
+                    if (rotation == null || rotation !in 0..3) {
+                        result.error(
+                            ERROR_BAD_ARGUMENTS,
+                            "VMRP rotation must be between 0 and 3",
+                            call.arguments,
+                        )
+                        return@setMethodCallHandler
+                    }
+                    val effectiveLandscape =
+                        (landscape ?: false) || rotation % 2 == 1
+                    setVmrpScreenRotation(rotation, effectiveLandscape)
+                    result.success(null)
+                }
+                METHOD_CLEAR_VMRP_ROTATION -> {
+                    clearVmrpScreenRotation()
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -338,11 +375,15 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        if (vmrpLandscape) {
+            landscapeOrientationListener?.enable()
+        }
         resumePendingInstall()
     }
 
     override fun onPause() {
         activityResumed = false
+        landscapeOrientationListener?.disable()
         super.onPause()
     }
 
@@ -405,6 +446,10 @@ class MainActivity : FlutterActivity() {
         hardwareKeysChannel = null
         debugKeysChannel?.setMethodCallHandler(null)
         debugKeysChannel = null
+        screenOrientationChannel?.setMethodCallHandler(null)
+        screenOrientationChannel = null
+        clearVmrpScreenRotation()
+        landscapeOrientationListener = null
         hardwareKeyCaptureEnabled = false
         debugKeyCaptureEnabled = false
         pressedHardwareKeys.clear()
@@ -920,6 +965,63 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun setVmrpScreenRotation(rotation: Int, landscape: Boolean) {
+        vmrpLandscape = landscape
+        val targetOrientation = when {
+            landscape -> {
+                ensureLandscapeOrientationListener()
+                if (activityResumed) {
+                    landscapeOrientationListener?.enable()
+                }
+                when (appliedVmrpOrientation) {
+                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+                    ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE ->
+                        appliedVmrpOrientation
+                    else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                }
+            }
+            rotation == 2 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+            else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        if (!landscape) {
+            landscapeOrientationListener?.disable()
+        }
+        Log.i(
+            TAG,
+            "VMRP orientation request: rotation=$rotation, landscape=$landscape, " +
+                "target=$targetOrientation",
+        )
+        applyVmrpOrientation(targetOrientation)
+    }
+
+    private fun clearVmrpScreenRotation() {
+        vmrpLandscape = false
+        landscapeOrientationListener?.disable()
+        applyVmrpOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+    }
+
+    private fun ensureLandscapeOrientationListener() {
+        if (landscapeOrientationListener != null) return
+        landscapeOrientationListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (!vmrpLandscape || orientation == ORIENTATION_UNKNOWN) return
+                val targetOrientation = when (orientation) {
+                    in 45..135 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                    in 225..315 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    else -> return
+                }
+                applyVmrpOrientation(targetOrientation)
+            }
+        }
+    }
+
+    private fun applyVmrpOrientation(orientation: Int) {
+        if (appliedVmrpOrientation == orientation) return
+        appliedVmrpOrientation = orientation
+        requestedOrientation = orientation
+        Log.i(TAG, "Applied VMRP Activity orientation: $orientation")
+    }
+
     private fun getVibrator(): Vibrator? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -1037,6 +1139,9 @@ class MainActivity : FlutterActivity() {
         const val DEBUG_KEYS_CHANNEL = "skyengine/debug_keys"
         const val METHOD_SET_DEBUG_KEYS_ENABLED = "setEnabled"
         const val METHOD_DEBUG_KEY_EVENT = "keyEvent"
+        const val SCREEN_ORIENTATION_CHANNEL = "skyengine/screen_orientation"
+        const val METHOD_SET_VMRP_ROTATION = "setVmrpRotation"
+        const val METHOD_CLEAR_VMRP_ROTATION = "clearVmrpRotation"
         const val APP_UPDATE_CHANNEL = "skyengine/app_update"
         const val METHOD_GET_VERSION_CODE = "getVersionCode"
         const val METHOD_INSTALL_APK = "installApk"
