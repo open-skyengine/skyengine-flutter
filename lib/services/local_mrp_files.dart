@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:gbk_codec/gbk_codec.dart';
+import 'package:charset/charset.dart';
 
 class LocalMrpFile {
   final String path;
@@ -150,7 +150,7 @@ String _readMrpString(Uint8List bytes, int offset, int length) {
   if (raw.isEmpty) {
     return '';
   }
-  return gbk_bytes.decode(raw).trim();
+  return gbk.decode(raw, allowMalformed: true).trim();
 }
 
 int _readInt32Le(Uint8List bytes, int offset) {
