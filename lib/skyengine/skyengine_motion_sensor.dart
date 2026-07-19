@@ -5,45 +5,53 @@ import 'package:sensors_plus/sensors_plus.dart';
 const double _standardGravity = 9.80665;
 const int _vmrpMotionRange = 1000;
 
-class VmrpMotionSample {
+class SkyEngineMotionSample {
   final int x;
   final int y;
   final int z;
 
-  const VmrpMotionSample(this.x, this.y, this.z);
+  const SkyEngineMotionSample(this.x, this.y, this.z);
 
-  factory VmrpMotionSample.fromAcceleration({
+  factory SkyEngineMotionSample.fromAcceleration({
     required double x,
     required double y,
     required double z,
   }) {
-    return VmrpMotionSample(_toVmrpAxis(x), _toVmrpAxis(y), _toVmrpAxis(z));
+    return SkyEngineMotionSample(
+      _toVmrpAxis(x),
+      _toVmrpAxis(y),
+      _toVmrpAxis(z),
+    );
   }
 }
 
-typedef VmrpMotionSampleStreamFactory = Stream<VmrpMotionSample> Function();
+typedef SkyEngineMotionSampleStreamFactory =
+    Stream<SkyEngineMotionSample> Function();
 
-Stream<VmrpMotionSample> androidMotionSampleStream() {
+Stream<SkyEngineMotionSample> androidMotionSampleStream() {
   // Android's device axes match VMRP: face-up is +Z and upright is +Y.
   return accelerometerEventStream(
     samplingPeriod: SensorInterval.gameInterval,
   ).map(
-    (event) =>
-        VmrpMotionSample.fromAcceleration(x: event.x, y: event.y, z: event.z),
+    (event) => SkyEngineMotionSample.fromAcceleration(
+      x: event.x,
+      y: event.y,
+      z: event.z,
+    ),
   );
 }
 
-class VmrpMotionBridge {
-  final VmrpMotionSampleStreamFactory streamFactory;
-  final void Function(VmrpMotionSample sample) onSample;
+class SkyEngineMotionBridge {
+  final SkyEngineMotionSampleStreamFactory streamFactory;
+  final void Function(SkyEngineMotionSample sample) onSample;
   final void Function(Object error, StackTrace stackTrace) onError;
 
-  StreamSubscription<VmrpMotionSample>? _subscription;
+  StreamSubscription<SkyEngineMotionSample>? _subscription;
   int _generation = 0;
   bool _failed = false;
   bool _disposed = false;
 
-  VmrpMotionBridge({
+  SkyEngineMotionBridge({
     required this.streamFactory,
     required this.onSample,
     required this.onError,

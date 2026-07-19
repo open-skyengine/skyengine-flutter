@@ -52,9 +52,9 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
-# VMRP native library (dart:ffi).
-set(VMRP_BUILD_SHARED_ONLY ON CACHE BOOL "" FORCE)
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../vmrp" "${CMAKE_CURRENT_BINARY_DIR}/vmrp")
+# SkyEngine native library (dart:ffi).
+set(SKYENGINE_BUILD_SHARED_ONLY ON CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../skyengine" "${CMAKE_CURRENT_BINARY_DIR}/skyengine")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
@@ -85,7 +85,7 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
-install(FILES "$<TARGET_FILE:vmrp-shared>" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+install(FILES "$<TARGET_FILE:skyengine-shared>" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 if(EXISTS "${MYTHROAD_SYSTEM_DIR}")

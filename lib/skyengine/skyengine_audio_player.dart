@@ -6,9 +6,9 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
-import 'vmrp_bindings.dart';
+import 'skyengine_bindings.dart';
 
-class VmrpAudioPlayer {
+class SkyEngineAudioPlayer {
   static const int _framesPerChunk = 2048;
   static const int _startupChunks = 3;
   static const int _maxChunksPerPump = 8;
@@ -18,7 +18,7 @@ class VmrpAudioPlayer {
   static const Duration _idleInterval = Duration(milliseconds: 120);
   static const Duration _maxBufferDuration = Duration(seconds: 3);
 
-  final VmrpBindings bindings;
+  final SkyEngineBindings bindings;
   final SoLoud _soloud;
 
   AudioSource? _source;
@@ -38,7 +38,7 @@ class VmrpAudioPlayer {
 
   String? lastError;
 
-  VmrpAudioPlayer({required this.bindings, SoLoud? soloud})
+  SkyEngineAudioPlayer({required this.bindings, SoLoud? soloud})
     : _soloud = soloud ?? SoLoud.instance;
 
   void wake() {

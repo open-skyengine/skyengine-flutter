@@ -54,14 +54,14 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments += "-DVMRP_BUILD_SHARED_ONLY=ON"
+                arguments += "-DSKYENGINE_BUILD_SHARED_ONLY=ON"
             }
         }
     }
 
     externalNativeBuild {
         cmake {
-            path = file("../../vmrp/CMakeLists.txt")
+            path = file("../../skyengine/CMakeLists.txt")
             version = "3.18.1+"
         }
     }

@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/vmrp/vmrp_motion_sensor.dart';
+import 'package:skyengine/skyengine/skyengine_motion_sensor.dart';
 
 void main() {
   test('motion samples use the VMRP gravity range and Android axes', () {
-    final sample = VmrpMotionSample.fromAcceleration(
+    final sample = SkyEngineMotionSample.fromAcceleration(
       x: 9.80665,
       y: -4.903325,
       z: 9.80665,
@@ -17,7 +17,7 @@ void main() {
   });
 
   test('motion samples clamp over-range and invalid sensor values', () {
-    final sample = VmrpMotionSample.fromAcceleration(
+    final sample = SkyEngineMotionSample.fromAcceleration(
       x: 19.6133,
       y: double.negativeInfinity,
       z: -19.6133,
@@ -29,10 +29,12 @@ void main() {
   });
 
   test('motion bridge subscribes only while the guest listener is active', () {
-    final controller = StreamController<VmrpMotionSample>.broadcast(sync: true);
-    final received = <VmrpMotionSample>[];
+    final controller = StreamController<SkyEngineMotionSample>.broadcast(
+      sync: true,
+    );
+    final received = <SkyEngineMotionSample>[];
     var subscriptions = 0;
-    final bridge = VmrpMotionBridge(
+    final bridge = SkyEngineMotionBridge(
       streamFactory: () {
         subscriptions++;
         return controller.stream;
@@ -47,7 +49,7 @@ void main() {
 
     bridge.setEnabled(true);
     bridge.setEnabled(true);
-    controller.add(const VmrpMotionSample(1, 2, 3));
+    controller.add(const SkyEngineMotionSample(1, 2, 3));
 
     expect(subscriptions, 1);
     expect(bridge.isListening, isTrue);
@@ -62,10 +64,12 @@ void main() {
   });
 
   test('motion bridge stops retrying after a platform sensor error', () {
-    final controller = StreamController<VmrpMotionSample>.broadcast(sync: true);
+    final controller = StreamController<SkyEngineMotionSample>.broadcast(
+      sync: true,
+    );
     final errors = <Object>[];
     var subscriptions = 0;
-    final bridge = VmrpMotionBridge(
+    final bridge = SkyEngineMotionBridge(
       streamFactory: () {
         subscriptions++;
         return controller.stream;

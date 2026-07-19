@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/vmrp/vmrp_vibration.dart';
+import 'package:skyengine/skyengine/skyengine_vibration.dart';
 
 void main() {
   test('positive requests vibrate for the requested duration', () async {
     final durations = <int>[];
     var cancelCount = 0;
-    final controller = VmrpVibrationController(
+    final controller = SkyEngineVibrationController(
       vibrate: (durationMs) async => durations.add(durationMs),
       cancel: () async => cancelCount++,
     );
@@ -19,7 +19,7 @@ void main() {
   test('negative requests cancel and zero requests do nothing', () async {
     final durations = <int>[];
     var cancelCount = 0;
-    final controller = VmrpVibrationController(
+    final controller = SkyEngineVibrationController(
       vibrate: (durationMs) async => durations.add(durationMs),
       cancel: () async => cancelCount++,
     );
@@ -33,7 +33,7 @@ void main() {
 
   test('explicit cancellation always stops the platform vibrator', () async {
     var cancelCount = 0;
-    final controller = VmrpVibrationController(
+    final controller = SkyEngineVibrationController(
       vibrate: (_) async {},
       cancel: () async => cancelCount++,
     );
