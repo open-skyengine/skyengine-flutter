@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
-import 'vmrp_audio_player.dart';
-import 'vmrp_bindings.dart';
-import 'vmrp_motion_sensor.dart';
+import 'skyengine_audio_player.dart';
+import 'skyengine_bindings.dart';
+import 'skyengine_motion_sensor.dart';
 
-class VmrpEvent {
+class SkyEngineEvent {
   static const int keyPress = 0;
   static const int keyRelease = 1;
   static const int mouseDown = 2;
@@ -14,7 +14,7 @@ class VmrpEvent {
   static const int mouseMove = 12;
 }
 
-class VmrpKey {
+class SkyEngineKey {
   static const int key0 = 0;
   static const int key1 = 1;
   static const int key2 = 2;
@@ -38,28 +38,28 @@ class VmrpKey {
   static const int select = 20;
 }
 
-enum VmrpImageProcessingMode {
+enum SkyEngineImageProcessingMode {
   native(0),
   opencv(1);
 
   final int code;
 
-  const VmrpImageProcessingMode(this.code);
+  const SkyEngineImageProcessingMode(this.code);
 
-  static VmrpImageProcessingMode fromCode(int code) {
+  static SkyEngineImageProcessingMode fromCode(int code) {
     return switch (code) {
-      1 => VmrpImageProcessingMode.opencv,
-      _ => VmrpImageProcessingMode.native,
+      1 => SkyEngineImageProcessingMode.opencv,
+      _ => SkyEngineImageProcessingMode.native,
     };
   }
 }
 
-class VmrpScreenGeometry {
+class SkyEngineScreenGeometry {
   final int width;
   final int height;
   final int rotation;
 
-  const VmrpScreenGeometry({
+  const SkyEngineScreenGeometry({
     required this.width,
     required this.height,
     required this.rotation,
@@ -67,7 +67,7 @@ class VmrpScreenGeometry {
 
   @override
   bool operator ==(Object other) {
-    return other is VmrpScreenGeometry &&
+    return other is SkyEngineScreenGeometry &&
         other.width == width &&
         other.height == height &&
         other.rotation == rotation;
@@ -77,10 +77,10 @@ class VmrpScreenGeometry {
   int get hashCode => Object.hash(width, height, rotation);
 }
 
-class VmrpEngine {
+class SkyEngineEngine {
   static const Duration _statePollInterval = Duration(milliseconds: 16);
 
-  VmrpBindings? _bindings;
+  SkyEngineBindings? _bindings;
   final int panelScreenWidth;
   final int panelScreenHeight;
   int _screenWidth;
@@ -90,15 +90,15 @@ class VmrpEngine {
   int get screenWidth => _screenWidth;
   int get screenHeight => _screenHeight;
   int get screenRotation => _screenRotation;
-  VmrpScreenGeometry get screenGeometry => VmrpScreenGeometry(
+  SkyEngineScreenGeometry get screenGeometry => SkyEngineScreenGeometry(
     width: _screenWidth,
     height: _screenHeight,
     rotation: _screenRotation,
   );
 
   Timer? _statePollTimer;
-  VmrpAudioPlayer? _audioPlayer;
-  VmrpMotionBridge? _motionBridge;
+  SkyEngineAudioPlayer? _audioPlayer;
+  SkyEngineMotionBridge? _motionBridge;
   Pointer<Uint8>? _screenRgbaPtr;
   Uint8List? _screenRgbaView;
   bool _running = false;
@@ -119,21 +119,21 @@ class VmrpEngine {
   final StreamController<void> _onExit = StreamController.broadcast();
   Stream<void> get onExit => _onExit.stream;
 
-  final StreamController<VmrpScreenGeometry> _onScreenGeometryChanged =
+  final StreamController<SkyEngineScreenGeometry> _onScreenGeometryChanged =
       StreamController.broadcast();
-  Stream<VmrpScreenGeometry> get onScreenGeometryChanged =>
+  Stream<SkyEngineScreenGeometry> get onScreenGeometryChanged =>
       _onScreenGeometryChanged.stream;
 
-  VmrpEngine({
+  SkyEngineEngine({
     int screenWidth = 240,
     int screenHeight = 320,
-    VmrpMotionSampleStreamFactory? motionSampleStreamFactory,
+    SkyEngineMotionSampleStreamFactory? motionSampleStreamFactory,
   }) : panelScreenWidth = screenWidth,
        panelScreenHeight = screenHeight,
        _screenWidth = screenWidth,
        _screenHeight = screenHeight {
     if (motionSampleStreamFactory != null) {
-      _motionBridge = VmrpMotionBridge(
+      _motionBridge = SkyEngineMotionBridge(
         streamFactory: motionSampleStreamFactory,
         onSample: _sendMotionSample,
         onError: _handleMotionSensorError,
@@ -148,8 +148,8 @@ class VmrpEngine {
     }
     if (_bindings != null) return true;
     try {
-      _bindings = VmrpBindings();
-      _audioPlayer = VmrpAudioPlayer(bindings: _bindings!);
+      _bindings = SkyEngineBindings();
+      _audioPlayer = SkyEngineAudioPlayer(bindings: _bindings!);
       return true;
     } catch (e) {
       lastError = 'Failed to load vmrp library: $e';
@@ -304,7 +304,7 @@ class VmrpEngine {
     }
   }
 
-  int setImageProcessingMode(VmrpImageProcessingMode mode) {
+  int setImageProcessingMode(SkyEngineImageProcessingMode mode) {
     if (!_ensureBindings()) return -1;
     try {
       final ret = _bindings!.setImageProcessingMode(mode.code);
@@ -318,14 +318,14 @@ class VmrpEngine {
     }
   }
 
-  VmrpImageProcessingMode getImageProcessingMode() {
-    if (_bindings == null) return VmrpImageProcessingMode.native;
+  SkyEngineImageProcessingMode getImageProcessingMode() {
+    if (_bindings == null) return SkyEngineImageProcessingMode.native;
     try {
-      return VmrpImageProcessingMode.fromCode(
+      return SkyEngineImageProcessingMode.fromCode(
         _bindings!.getImageProcessingMode(),
       );
     } catch (_) {
-      return VmrpImageProcessingMode.native;
+      return SkyEngineImageProcessingMode.native;
     }
   }
 
@@ -336,27 +336,27 @@ class VmrpEngine {
 
   void sendTouchDown(int x, int y) {
     if (!_running || _paused) return;
-    _bindings!.event(VmrpEvent.mouseDown, x, y);
+    _bindings!.event(SkyEngineEvent.mouseDown, x, y);
   }
 
   void sendTouchUp(int x, int y) {
     if (!_running || _paused) return;
-    _bindings!.event(VmrpEvent.mouseUp, x, y);
+    _bindings!.event(SkyEngineEvent.mouseUp, x, y);
   }
 
   void sendTouchMove(int x, int y) {
     if (!_running || _paused) return;
-    _bindings!.event(VmrpEvent.mouseMove, x, y);
+    _bindings!.event(SkyEngineEvent.mouseMove, x, y);
   }
 
   void sendKeyDown(int keyCode) {
     if (!_running || _paused) return;
-    _bindings!.event(VmrpEvent.keyPress, keyCode, 0);
+    _bindings!.event(SkyEngineEvent.keyPress, keyCode, 0);
   }
 
   void sendKeyUp(int keyCode) {
     if (!_running || _paused) return;
-    _bindings!.event(VmrpEvent.keyRelease, keyCode, 0);
+    _bindings!.event(SkyEngineEvent.keyRelease, keyCode, 0);
   }
 
   int pause() {
@@ -583,7 +583,7 @@ class VmrpEngine {
     }
   }
 
-  void _sendMotionSample(VmrpMotionSample sample) {
+  void _sendMotionSample(SkyEngineMotionSample sample) {
     final motion = _bindings?.motion;
     if (!_running || _paused || motion == null) return;
     try {

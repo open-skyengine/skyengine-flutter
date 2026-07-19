@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'vmrp_engine.dart';
+import 'skyengine_engine.dart';
 
-class VmrpWidget extends StatefulWidget {
-  final VmrpEngine engine;
+class SkyEngineWidget extends StatefulWidget {
+  final SkyEngineEngine engine;
   final double scale;
   final double? width;
   final double? height;
 
-  const VmrpWidget({
+  const SkyEngineWidget({
     super.key,
     required this.engine,
     this.scale = 2.0,
@@ -18,12 +18,12 @@ class VmrpWidget extends StatefulWidget {
   });
 
   @override
-  State<VmrpWidget> createState() => _VmrpWidgetState();
+  State<SkyEngineWidget> createState() => _VmrpWidgetState();
 }
 
-class _VmrpWidgetState extends State<VmrpWidget> {
+class _VmrpWidgetState extends State<SkyEngineWidget> {
   StreamSubscription<void>? _sub;
-  StreamSubscription<VmrpScreenGeometry>? _geometrySub;
+  StreamSubscription<SkyEngineScreenGeometry>? _geometrySub;
   ui.Image? _screenImage;
   int? _activePointer;
   Offset? _lastTouchPoint;
@@ -33,7 +33,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   bool _screenUpdatePending = false;
   int _engineEpoch = 0;
 
-  VmrpEngine get engine => widget.engine;
+  SkyEngineEngine get engine => widget.engine;
 
   @override
   void initState() {
@@ -42,7 +42,7 @@ class _VmrpWidgetState extends State<VmrpWidget> {
   }
 
   @override
-  void didUpdateWidget(covariant VmrpWidget oldWidget) {
+  void didUpdateWidget(covariant SkyEngineWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (identical(oldWidget.engine, widget.engine)) {
       return;

@@ -8,10 +8,10 @@ import '../services/local_mrp_files.dart';
 import '../models/mrp_resolution.dart';
 import '../platform/android_screen_orientation.dart';
 import '../platform/android_vibration.dart';
-import '../vmrp/vmrp_engine.dart';
-import '../vmrp/vmrp_motion_sensor.dart';
-import '../vmrp/vmrp_vibration.dart';
-import '../vmrp/vmrp_widget.dart';
+import '../skyengine/skyengine_engine.dart';
+import '../skyengine/skyengine_motion_sensor.dart';
+import '../skyengine/skyengine_vibration.dart';
+import '../skyengine/skyengine_widget.dart';
 
 String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
   final normalizedMrpPath = mrpPath.replaceAll('\\', '/');
@@ -67,10 +67,10 @@ extension on _KeypadMode {
   };
 }
 
-extension on VmrpImageProcessingMode {
+extension on SkyEngineImageProcessingMode {
   String get label => switch (this) {
-    VmrpImageProcessingMode.native => 'Native',
-    VmrpImageProcessingMode.opencv => 'OpenCV',
+    SkyEngineImageProcessingMode.native => 'Native',
+    SkyEngineImageProcessingMode.opencv => 'OpenCV',
   };
 }
 
@@ -177,12 +177,13 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   static const double _landscapeKeypadColumnGap = 6;
   static const double _landscapeKeypadMinWidth = 120;
   static const double _landscapeKeypadMaxWidth = 170;
-  VmrpEngine? _engine;
+  SkyEngineEngine? _engine;
   final FocusNode _keyboardFocusNode = FocusNode();
-  final VmrpVibrationController _vmrpVibration = VmrpVibrationController(
-    vibrate: AndroidVibration.vibrate,
-    cancel: AndroidVibration.cancel,
-  );
+  final SkyEngineVibrationController _vmrpVibration =
+      SkyEngineVibrationController(
+        vibrate: AndroidVibration.vibrate,
+        cancel: AndroidVibration.cancel,
+      );
   final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
   _KeypadMode _keypadMode = _KeypadMode.directional;
   String? _error;
@@ -191,7 +192,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   bool _isFullscreen = false;
   late MrpResolution _currentResolution;
   late final String _title;
-  VmrpImageProcessingMode _imageProcessingMode = VmrpImageProcessingMode.native;
+  SkyEngineImageProcessingMode _imageProcessingMode =
+      SkyEngineImageProcessingMode.native;
   DateTime? _lastVirtualKeyHapticAt;
   bool _appInForeground = true;
 
@@ -288,7 +290,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       '${dnsMap == null || dnsMap.isEmpty ? '(empty)' : dnsMap}',
     );
 
-    final engine = VmrpEngine(
+    final engine = SkyEngineEngine(
       screenWidth: _currentResolution.width,
       screenHeight: _currentResolution.height,
       motionSampleStreamFactory: Platform.isAndroid
@@ -386,7 +388,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     _keyboardFocusNode.requestFocus();
   }
 
-  bool _isLandscapeRotation(VmrpEngine engine, int rotation) {
+  bool _isLandscapeRotation(SkyEngineEngine engine, int rotation) {
     if (engine.panelScreenWidth == engine.panelScreenHeight) {
       return engine.screenWidth > engine.screenHeight;
     }
@@ -493,82 +495,82 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
 
   int? _keyCodeForCharacter(String character) {
     return switch (character) {
-      '0' => VmrpKey.key0,
-      '1' => VmrpKey.key1,
-      '2' => VmrpKey.key2,
-      '3' => VmrpKey.key3,
-      '4' => VmrpKey.key4,
-      '5' => VmrpKey.key5,
-      '6' => VmrpKey.key6,
-      '7' => VmrpKey.key7,
-      '8' => VmrpKey.key8,
-      '9' => VmrpKey.key9,
-      '*' => VmrpKey.star,
-      '#' => VmrpKey.pound,
+      '0' => SkyEngineKey.key0,
+      '1' => SkyEngineKey.key1,
+      '2' => SkyEngineKey.key2,
+      '3' => SkyEngineKey.key3,
+      '4' => SkyEngineKey.key4,
+      '5' => SkyEngineKey.key5,
+      '6' => SkyEngineKey.key6,
+      '7' => SkyEngineKey.key7,
+      '8' => SkyEngineKey.key8,
+      '9' => SkyEngineKey.key9,
+      '*' => SkyEngineKey.star,
+      '#' => SkyEngineKey.pound,
       _ => null,
     };
   }
 
   int? _keyCodeForLogicalKey(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW) {
-      return VmrpKey.up;
+      return SkyEngineKey.up;
     }
     if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS) {
-      return VmrpKey.down;
+      return SkyEngineKey.down;
     }
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
-      return VmrpKey.left;
+      return SkyEngineKey.left;
     }
     if (key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.keyD) {
-      return VmrpKey.right;
+      return SkyEngineKey.right;
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
-      return VmrpKey.select;
+      return SkyEngineKey.select;
     }
     if (key == LogicalKeyboardKey.keyQ) {
-      return VmrpKey.softLeft;
+      return SkyEngineKey.softLeft;
     }
     if (key == LogicalKeyboardKey.keyE) {
-      return VmrpKey.softRight;
+      return SkyEngineKey.softRight;
     }
     if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
-      return VmrpKey.key0;
+      return SkyEngineKey.key0;
     }
     if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
-      return VmrpKey.key1;
+      return SkyEngineKey.key1;
     }
     if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
-      return VmrpKey.key2;
+      return SkyEngineKey.key2;
     }
     if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
-      return VmrpKey.key3;
+      return SkyEngineKey.key3;
     }
     if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
-      return VmrpKey.key4;
+      return SkyEngineKey.key4;
     }
     if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
-      return VmrpKey.key5;
+      return SkyEngineKey.key5;
     }
     if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
-      return VmrpKey.key6;
+      return SkyEngineKey.key6;
     }
     if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
-      return VmrpKey.key7;
+      return SkyEngineKey.key7;
     }
     if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
-      return VmrpKey.key8;
+      return SkyEngineKey.key8;
     }
     if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
-      return VmrpKey.key9;
+      return SkyEngineKey.key9;
     }
     if (key == LogicalKeyboardKey.asterisk ||
         key == LogicalKeyboardKey.numpadMultiply) {
-      return VmrpKey.star;
+      return SkyEngineKey.star;
     }
     if (key == LogicalKeyboardKey.numberSign) {
-      return VmrpKey.pound;
+      return SkyEngineKey.pound;
     }
     return null;
   }
@@ -846,13 +848,13 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   }
 
   Future<void> _showImageProcessingDialog() async {
-    final selected = await showDialog<VmrpImageProcessingMode>(
+    final selected = await showDialog<SkyEngineImageProcessingMode>(
       context: context,
       builder: (ctx) {
         return SimpleDialog(
           title: const Text('图像处理方式'),
           children: [
-            for (final mode in VmrpImageProcessingMode.values)
+            for (final mode in SkyEngineImageProcessingMode.values)
               SimpleDialogOption(
                 onPressed: () => Navigator.of(ctx).pop(mode),
                 child: Row(
@@ -1115,7 +1117,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     }
 
     final engine = _engine!;
-    return StreamBuilder<VmrpScreenGeometry>(
+    return StreamBuilder<SkyEngineScreenGeometry>(
       stream: engine.onScreenGeometryChanged,
       initialData: engine.screenGeometry,
       builder: (context, _) => LayoutBuilder(
@@ -1146,7 +1148,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                VmrpWidget(
+                SkyEngineWidget(
                   engine: engine,
                   width: screenWidth,
                   height: screenHeight,
@@ -1163,7 +1165,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     );
   }
 
-  Widget _buildLandscapePlayer(VmrpEngine engine, BoxConstraints constraints) {
+  Widget _buildLandscapePlayer(
+    SkyEngineEngine engine,
+    BoxConstraints constraints,
+  ) {
     final sideWidth = (constraints.maxWidth * 0.2).clamp(
       _landscapeKeypadMinWidth,
       _landscapeKeypadMaxWidth,
@@ -1191,7 +1196,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
           child: _buildLandscapeLeftKeypad(sideWidth),
         ),
         const SizedBox(width: _landscapeKeypadGap),
-        VmrpWidget(engine: engine, width: screenWidth, height: screenHeight),
+        SkyEngineWidget(
+          engine: engine,
+          width: screenWidth,
+          height: screenHeight,
+        ),
         const SizedBox(width: _landscapeKeypadGap),
         _buildLandscapeKeypadSide(
           width: sideWidth,
@@ -1224,10 +1233,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         columnGap: _landscapeKeypadColumnGap,
       ),
       _KeypadMode.numeric => _buildNumericKeypadHalf(const [
-        [('1', VmrpKey.key1), ('2', VmrpKey.key2)],
-        [('4', VmrpKey.key4), ('5', VmrpKey.key5)],
-        [('7', VmrpKey.key7), ('8', VmrpKey.key8)],
-        [('*', VmrpKey.star), ('0', VmrpKey.key0)],
+        [('1', SkyEngineKey.key1), ('2', SkyEngineKey.key2)],
+        [('4', SkyEngineKey.key4), ('5', SkyEngineKey.key5)],
+        [('7', SkyEngineKey.key7), ('8', SkyEngineKey.key8)],
+        [('*', SkyEngineKey.star), ('0', SkyEngineKey.key0)],
       ], buttonWidth: twoColumnButtonWidth),
       _KeypadMode.full => _buildDirectionalKeypad(
         buttonWidth: threeColumnButtonWidth,
@@ -1243,10 +1252,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     return switch (_keypadMode) {
       _KeypadMode.directional => _buildSoftKeypad(),
       _KeypadMode.numeric => _buildNumericKeypadHalf(const [
-        [('3', VmrpKey.key3)],
-        [('6', VmrpKey.key6)],
-        [('9', VmrpKey.key9)],
-        [('#', VmrpKey.pound)],
+        [('3', SkyEngineKey.key3)],
+        [('6', SkyEngineKey.key6)],
+        [('9', SkyEngineKey.key9)],
+        [('#', SkyEngineKey.pound)],
       ], buttonWidth: threeColumnButtonWidth),
       _KeypadMode.full => _buildNumericKeypad(
         buttonWidth: threeColumnButtonWidth,
@@ -1267,19 +1276,19 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         children: [
           _keypadRow([
             SizedBox(width: buttonWidth),
-            _keyButton('上', VmrpKey.up, width: buttonWidth),
+            _keyButton('上', SkyEngineKey.up, width: buttonWidth),
             SizedBox(width: buttonWidth),
           ], columnGap: columnGap),
           const SizedBox(height: _keypadRowGap),
           _keypadRow([
-            _keyButton('左', VmrpKey.left, width: buttonWidth),
-            _keyButton('确定', VmrpKey.select, width: buttonWidth),
-            _keyButton('右', VmrpKey.right, width: buttonWidth),
+            _keyButton('左', SkyEngineKey.left, width: buttonWidth),
+            _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
+            _keyButton('右', SkyEngineKey.right, width: buttonWidth),
           ], columnGap: columnGap),
           const SizedBox(height: _keypadRowGap),
           _keypadRow([
             SizedBox(width: buttonWidth),
-            _keyButton('下', VmrpKey.down, width: buttonWidth),
+            _keyButton('下', SkyEngineKey.down, width: buttonWidth),
             SizedBox(width: buttonWidth),
           ], columnGap: columnGap),
         ],
@@ -1291,9 +1300,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _keyButton('左软键', VmrpKey.softLeft),
+        _keyButton('左软键', SkyEngineKey.softLeft),
         const SizedBox(height: _keypadRowGap),
-        _keyButton('右软键', VmrpKey.softRight),
+        _keyButton('右软键', SkyEngineKey.softRight),
       ],
     );
   }
@@ -1358,20 +1367,20 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _keypadRow([
-          _keyButton('左软键', VmrpKey.softLeft, width: buttonWidth),
-          _keyButton('上', VmrpKey.up, width: buttonWidth),
-          _keyButton('右软键', VmrpKey.softRight, width: buttonWidth),
+          _keyButton('左软键', SkyEngineKey.softLeft, width: buttonWidth),
+          _keyButton('上', SkyEngineKey.up, width: buttonWidth),
+          _keyButton('右软键', SkyEngineKey.softRight, width: buttonWidth),
         ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
         _keypadRow([
-          _keyButton('左', VmrpKey.left, width: buttonWidth),
-          _keyButton('确定', VmrpKey.select, width: buttonWidth),
-          _keyButton('右', VmrpKey.right, width: buttonWidth),
+          _keyButton('左', SkyEngineKey.left, width: buttonWidth),
+          _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
+          _keyButton('右', SkyEngineKey.right, width: buttonWidth),
         ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
         _keypadRow([
           SizedBox(width: buttonWidth),
-          _keyButton('下', VmrpKey.down, width: buttonWidth),
+          _keyButton('下', SkyEngineKey.down, width: buttonWidth),
           SizedBox(width: buttonWidth),
         ], columnGap: columnGap),
       ],
@@ -1383,10 +1392,26 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     double columnGap = _keypadColumnGap,
   }) {
     const keys = [
-      [('1', VmrpKey.key1), ('2', VmrpKey.key2), ('3', VmrpKey.key3)],
-      [('4', VmrpKey.key4), ('5', VmrpKey.key5), ('6', VmrpKey.key6)],
-      [('7', VmrpKey.key7), ('8', VmrpKey.key8), ('9', VmrpKey.key9)],
-      [('*', VmrpKey.star), ('0', VmrpKey.key0), ('#', VmrpKey.pound)],
+      [
+        ('1', SkyEngineKey.key1),
+        ('2', SkyEngineKey.key2),
+        ('3', SkyEngineKey.key3),
+      ],
+      [
+        ('4', SkyEngineKey.key4),
+        ('5', SkyEngineKey.key5),
+        ('6', SkyEngineKey.key6),
+      ],
+      [
+        ('7', SkyEngineKey.key7),
+        ('8', SkyEngineKey.key8),
+        ('9', SkyEngineKey.key9),
+      ],
+      [
+        ('*', SkyEngineKey.star),
+        ('0', SkyEngineKey.key0),
+        ('#', SkyEngineKey.pound),
+      ],
     ];
 
     return Column(

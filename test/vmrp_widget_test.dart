@@ -3,11 +3,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/vmrp/vmrp_engine.dart';
-import 'package:skyengine/vmrp/vmrp_widget.dart';
+import 'package:skyengine/skyengine/skyengine_engine.dart';
+import 'package:skyengine/skyengine/skyengine_widget.dart';
 
 void main() {
-  testWidgets('VmrpWidget listens to a replacement engine', (tester) async {
+  testWidgets('SkyEngineWidget listens to a replacement engine', (
+    tester,
+  ) async {
     final firstEngine = _FakeVmrpEngine();
     final secondEngine = _FakeVmrpEngine(screenWidth: 320, screenHeight: 480);
     addTearDown(firstEngine.close);
@@ -26,46 +28,55 @@ void main() {
     expect(secondEngine.hasGeometryListener, isTrue);
   });
 
-  testWidgets('VmrpWidget resizes and maps touches after screen rotation', (
-    tester,
-  ) async {
-    final engine = _FakeVmrpEngine();
-    addTearDown(engine.close);
+  testWidgets(
+    'SkyEngineWidget resizes and maps touches after screen rotation',
+    (tester) async {
+      final engine = _FakeVmrpEngine();
+      addTearDown(engine.close);
 
-    await tester.pumpWidget(_TestApp(engine: engine));
-    expect(tester.getSize(find.byType(VmrpWidget)), const Size(240, 320));
+      await tester.pumpWidget(_TestApp(engine: engine));
+      expect(
+        tester.getSize(find.byType(SkyEngineWidget)),
+        const Size(240, 320),
+      );
 
-    engine.setGeometry(width: 320, height: 240, rotation: 3);
-    await tester.pump();
+      engine.setGeometry(width: 320, height: 240, rotation: 3);
+      await tester.pump();
 
-    expect(tester.getSize(find.byType(VmrpWidget)), const Size(320, 240));
-    final origin = tester.getTopLeft(find.byType(VmrpWidget));
-    final gesture = await tester.startGesture(origin + const Offset(319, 239));
-    await gesture.up();
+      expect(
+        tester.getSize(find.byType(SkyEngineWidget)),
+        const Size(320, 240),
+      );
+      final origin = tester.getTopLeft(find.byType(SkyEngineWidget));
+      final gesture = await tester.startGesture(
+        origin + const Offset(319, 239),
+      );
+      await gesture.up();
 
-    expect(engine.lastTouchDown, const Offset(319, 239));
-    expect(engine.lastTouchUp, const Offset(319, 239));
-  });
+      expect(engine.lastTouchDown, const Offset(319, 239));
+      expect(engine.lastTouchUp, const Offset(319, 239));
+    },
+  );
 }
 
 class _TestApp extends StatelessWidget {
-  final VmrpEngine engine;
+  final SkyEngineEngine engine;
 
   const _TestApp({required this.engine});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Center(child: VmrpWidget(engine: engine, scale: 1)),
+      home: Center(child: SkyEngineWidget(engine: engine, scale: 1)),
     );
   }
 }
 
-class _FakeVmrpEngine extends VmrpEngine {
+class _FakeVmrpEngine extends SkyEngineEngine {
   final StreamController<void> _screenUpdates =
       StreamController<void>.broadcast(sync: true);
-  final StreamController<VmrpScreenGeometry> _geometryUpdates =
-      StreamController<VmrpScreenGeometry>.broadcast(sync: true);
+  final StreamController<SkyEngineScreenGeometry> _geometryUpdates =
+      StreamController<SkyEngineScreenGeometry>.broadcast(sync: true);
   late int _width = panelScreenWidth;
   late int _height = panelScreenHeight;
   int _rotation = 0;
@@ -88,14 +99,17 @@ class _FakeVmrpEngine extends VmrpEngine {
   int get screenRotation => _rotation;
 
   @override
-  VmrpScreenGeometry get screenGeometry =>
-      VmrpScreenGeometry(width: _width, height: _height, rotation: _rotation);
+  SkyEngineScreenGeometry get screenGeometry => SkyEngineScreenGeometry(
+    width: _width,
+    height: _height,
+    rotation: _rotation,
+  );
 
   @override
   Stream<void> get onScreenUpdate => _screenUpdates.stream;
 
   @override
-  Stream<VmrpScreenGeometry> get onScreenGeometryChanged =>
+  Stream<SkyEngineScreenGeometry> get onScreenGeometryChanged =>
       _geometryUpdates.stream;
 
   @override

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../vmrp/vmrp_engine.dart';
+import '../skyengine/skyengine_engine.dart';
 
 class DebugPage extends StatelessWidget {
   const DebugPage({super.key});
@@ -162,82 +162,82 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
 
   int? _vmrpKeyCodeForCharacter(String character) {
     return switch (character) {
-      '0' => VmrpKey.key0,
-      '1' => VmrpKey.key1,
-      '2' => VmrpKey.key2,
-      '3' => VmrpKey.key3,
-      '4' => VmrpKey.key4,
-      '5' => VmrpKey.key5,
-      '6' => VmrpKey.key6,
-      '7' => VmrpKey.key7,
-      '8' => VmrpKey.key8,
-      '9' => VmrpKey.key9,
-      '*' => VmrpKey.star,
-      '#' => VmrpKey.pound,
+      '0' => SkyEngineKey.key0,
+      '1' => SkyEngineKey.key1,
+      '2' => SkyEngineKey.key2,
+      '3' => SkyEngineKey.key3,
+      '4' => SkyEngineKey.key4,
+      '5' => SkyEngineKey.key5,
+      '6' => SkyEngineKey.key6,
+      '7' => SkyEngineKey.key7,
+      '8' => SkyEngineKey.key8,
+      '9' => SkyEngineKey.key9,
+      '*' => SkyEngineKey.star,
+      '#' => SkyEngineKey.pound,
       _ => null,
     };
   }
 
   int? _vmrpKeyCodeForLogicalKey(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.keyQ) {
-      return VmrpKey.softLeft;
+      return SkyEngineKey.softLeft;
     }
     if (key == LogicalKeyboardKey.keyE) {
-      return VmrpKey.softRight;
+      return SkyEngineKey.softRight;
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
-      return VmrpKey.select;
+      return SkyEngineKey.select;
     }
     if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW) {
-      return VmrpKey.up;
+      return SkyEngineKey.up;
     }
     if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS) {
-      return VmrpKey.down;
+      return SkyEngineKey.down;
     }
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
-      return VmrpKey.left;
+      return SkyEngineKey.left;
     }
     if (key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.keyD) {
-      return VmrpKey.right;
+      return SkyEngineKey.right;
     }
     if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
-      return VmrpKey.key0;
+      return SkyEngineKey.key0;
     }
     if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
-      return VmrpKey.key1;
+      return SkyEngineKey.key1;
     }
     if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
-      return VmrpKey.key2;
+      return SkyEngineKey.key2;
     }
     if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
-      return VmrpKey.key3;
+      return SkyEngineKey.key3;
     }
     if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
-      return VmrpKey.key4;
+      return SkyEngineKey.key4;
     }
     if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
-      return VmrpKey.key5;
+      return SkyEngineKey.key5;
     }
     if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
-      return VmrpKey.key6;
+      return SkyEngineKey.key6;
     }
     if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
-      return VmrpKey.key7;
+      return SkyEngineKey.key7;
     }
     if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
-      return VmrpKey.key8;
+      return SkyEngineKey.key8;
     }
     if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
-      return VmrpKey.key9;
+      return SkyEngineKey.key9;
     }
     if (key == LogicalKeyboardKey.asterisk ||
         key == LogicalKeyboardKey.numpadMultiply) {
-      return VmrpKey.star;
+      return SkyEngineKey.star;
     }
     if (key == LogicalKeyboardKey.numberSign) {
-      return VmrpKey.pound;
+      return SkyEngineKey.pound;
     }
     return null;
   }
@@ -310,27 +310,27 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
       return nativeName;
     }
     return switch (keyCode) {
-      VmrpKey.key0 => '0',
-      VmrpKey.key1 => '1',
-      VmrpKey.key2 => '2',
-      VmrpKey.key3 => '3',
-      VmrpKey.key4 => '4',
-      VmrpKey.key5 => '5',
-      VmrpKey.key6 => '6',
-      VmrpKey.key7 => '7',
-      VmrpKey.key8 => '8',
-      VmrpKey.key9 => '9',
-      VmrpKey.star => '*',
-      VmrpKey.pound => '#',
-      VmrpKey.up => 'up',
-      VmrpKey.down => 'down',
-      VmrpKey.left => 'left',
-      VmrpKey.right => 'right',
-      VmrpKey.power => 'power',
-      VmrpKey.softLeft => 'softLeft',
-      VmrpKey.softRight => 'softRight',
-      VmrpKey.send => 'send',
-      VmrpKey.select => 'select',
+      SkyEngineKey.key0 => '0',
+      SkyEngineKey.key1 => '1',
+      SkyEngineKey.key2 => '2',
+      SkyEngineKey.key3 => '3',
+      SkyEngineKey.key4 => '4',
+      SkyEngineKey.key5 => '5',
+      SkyEngineKey.key6 => '6',
+      SkyEngineKey.key7 => '7',
+      SkyEngineKey.key8 => '8',
+      SkyEngineKey.key9 => '9',
+      SkyEngineKey.star => '*',
+      SkyEngineKey.pound => '#',
+      SkyEngineKey.up => 'up',
+      SkyEngineKey.down => 'down',
+      SkyEngineKey.left => 'left',
+      SkyEngineKey.right => 'right',
+      SkyEngineKey.power => 'power',
+      SkyEngineKey.softLeft => 'softLeft',
+      SkyEngineKey.softRight => 'softRight',
+      SkyEngineKey.send => 'send',
+      SkyEngineKey.select => 'select',
       _ => 'unknown',
     };
   }
@@ -369,12 +369,12 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
                     children: [
                       _KeyStateChip(
                         label: '左软键',
-                        active: _lastVmrpKeyCode == VmrpKey.softLeft,
+                        active: _lastVmrpKeyCode == SkyEngineKey.softLeft,
                       ),
                       const SizedBox(width: 8),
                       _KeyStateChip(
                         label: '右软键',
-                        active: _lastVmrpKeyCode == VmrpKey.softRight,
+                        active: _lastVmrpKeyCode == SkyEngineKey.softRight,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
