@@ -52,15 +52,19 @@ void main() {
       expect(find.text('本地'), findsOneWidget);
       expect(find.text('商店'), findsOneWidget);
       expect(find.text('更多'), findsOneWidget);
+      expect(find.byTooltip('导入 MRP 文件'), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsNothing);
 
       await tester.tap(find.text('商店'));
       await tester.pump();
 
       expect(find.text('搜索应用'), findsOneWidget);
+      expect(find.byTooltip('导入 MRP 文件'), findsNothing);
 
       await tester.tap(find.text('更多'));
       await tester.pump();
 
+      expect(find.byTooltip('导入 MRP 文件'), findsNothing);
       expect(find.byTooltip('切换到深色模式'), findsOneWidget);
       expect(find.text('深色设置'), findsOneWidget);
       expect(find.text('模拟器设置'), findsOneWidget);

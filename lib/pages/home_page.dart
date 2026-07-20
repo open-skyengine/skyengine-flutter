@@ -772,6 +772,12 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('SkyEngine'),
         actions: [
+          if (_selectedIndex == 0)
+            IconButton(
+              onPressed: _pickAndCopyMrp,
+              tooltip: '导入 MRP 文件',
+              icon: const Icon(Icons.add),
+            ),
           if (_selectedIndex == 2)
             IconButton(
               tooltip: Theme.of(context).brightness == Brightness.dark
@@ -818,13 +824,6 @@ class _HomePageState extends State<HomePage> {
           setState(() => _selectedIndex = index);
         },
       ),
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: _pickAndCopyMrp,
-              tooltip: '导入 MRP 文件',
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
@@ -833,7 +832,7 @@ class _HomePageState extends State<HomePage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_mrpFiles.isEmpty) {
-      return const Center(child: Text('没有 MRP 文件，点击右下角按钮导入'));
+      return const Center(child: Text('没有 MRP 文件，点击右上角按钮导入'));
     }
 
     return ListView.builder(
