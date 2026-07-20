@@ -12,6 +12,7 @@ import '../skyengine/skyengine_engine.dart';
 import '../skyengine/skyengine_motion_sensor.dart';
 import '../skyengine/skyengine_vibration.dart';
 import '../skyengine/skyengine_widget.dart';
+import '../widgets/virtual_joystick.dart';
 
 String runtimeMrpPathForWorkDir(String mrpPath, String workDir) {
   final normalizedMrpPath = mrpPath.replaceAll('\\', '/');
@@ -56,11 +57,12 @@ String mrpPlayerTitleForPath(String mrpPath, {String? title}) {
   return fileNameWithoutExtension(localFiles.fileName(mrpPath));
 }
 
-enum _KeypadMode { directional, numeric, full, none }
+enum _KeypadMode { directional, joystick, numeric, full, none }
 
 extension on _KeypadMode {
   String get label => switch (this) {
     _KeypadMode.directional => '方向键',
+    _KeypadMode.joystick => '摇杆',
     _KeypadMode.numeric => '9键',
     _KeypadMode.full => '全键',
     _KeypadMode.none => '无键盘',
@@ -173,6 +175,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   static const double _keypadRowGap = 10;
   static const double _keypadButtonWidth = 84;
   static const double _keypadButtonHeight = 44;
+  static const double _joystickSize = 152;
   static const double _landscapeKeypadGap = 12;
   static const double _landscapeKeypadColumnGap = 6;
   static const double _landscapeKeypadMinWidth = 120;
@@ -200,6 +203,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   double get _keypadReservedHeight {
     return switch (_keypadMode) {
       _KeypadMode.directional => _keypadButtonHeight * 3 + _keypadRowGap * 2,
+      _KeypadMode.joystick => _joystickSize,
       _KeypadMode.numeric => _keypadButtonHeight * 4 + _keypadRowGap * 3,
       _KeypadMode.full => _keypadButtonHeight * 4 + _keypadRowGap * 3,
       _KeypadMode.none => 0,
@@ -1232,6 +1236,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         buttonWidth: threeColumnButtonWidth,
         columnGap: _landscapeKeypadColumnGap,
       ),
+      _KeypadMode.joystick => _buildJoystick(),
       _KeypadMode.numeric => _buildNumericKeypadHalf(const [
         [('1', SkyEngineKey.key1), ('2', SkyEngineKey.key2)],
         [('4', SkyEngineKey.key4), ('5', SkyEngineKey.key5)],
@@ -1251,6 +1256,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
     return switch (_keypadMode) {
       _KeypadMode.directional => _buildSoftKeypad(),
+      _KeypadMode.joystick => _buildJoystickActionKeys(buttonWidth: sideWidth),
       _KeypadMode.numeric => _buildNumericKeypadHalf(const [
         [('3', SkyEngineKey.key3)],
         [('6', SkyEngineKey.key6)],
@@ -1353,9 +1359,56 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   Widget _buildKeypad() {
     return switch (_keypadMode) {
       _KeypadMode.directional => _buildDirectionalKeypad(),
+      _KeypadMode.joystick => _buildJoystickKeypad(),
       _KeypadMode.numeric => _buildNumericKeypad(),
       _KeypadMode.full => _buildFullKeypad(),
       _KeypadMode.none => const SizedBox.shrink(),
+    };
+  }
+
+  Widget _buildJoystickKeypad() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildJoystick(),
+        const SizedBox(width: _keypadColumnGap),
+        _buildJoystickActionKeys(),
+      ],
+    );
+  }
+
+  Widget _buildJoystick() {
+    return VirtualJoystick(
+      size: _joystickSize,
+      onDirectionPressed: (direction) {
+        unawaited(_vibrateVirtualKey());
+        _engine?.sendKeyDown(_keyCodeForJoystickDirection(direction));
+      },
+      onDirectionReleased: (direction) {
+        _engine?.sendKeyUp(_keyCodeForJoystickDirection(direction));
+      },
+    );
+  }
+
+  Widget _buildJoystickActionKeys({double buttonWidth = _keypadButtonWidth}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _keyButton('左软键', SkyEngineKey.softLeft, width: buttonWidth),
+        const SizedBox(height: _keypadRowGap),
+        _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
+        const SizedBox(height: _keypadRowGap),
+        _keyButton('右软键', SkyEngineKey.softRight, width: buttonWidth),
+      ],
+    );
+  }
+
+  int _keyCodeForJoystickDirection(JoystickDirection direction) {
+    return switch (direction) {
+      JoystickDirection.up => SkyEngineKey.up,
+      JoystickDirection.down => SkyEngineKey.down,
+      JoystickDirection.left => SkyEngineKey.left,
+      JoystickDirection.right => SkyEngineKey.right,
     };
   }
 

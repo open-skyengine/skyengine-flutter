@@ -55,7 +55,7 @@ void main() {
     );
   });
 
-  testWidgets('keyboard dialog includes full keypad mode', (tester) async {
+  testWidgets('keyboard dialog includes all keypad modes', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: MrpPlayerPage(mrpPath: 'missing.mrp')),
     );
@@ -70,6 +70,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('方向键'), findsOneWidget);
+    expect(find.text('摇杆'), findsOneWidget);
     expect(find.text('9键'), findsOneWidget);
     expect(find.text('全键'), findsOneWidget);
     expect(find.text('无键盘'), findsOneWidget);
