@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skyengine/services/local_mrp_database.dart';
 import 'package:skyengine/services/local_mrp_files.dart';
+import 'package:skyengine/services/theme_settings.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:skyengine/platform/android_mrp_open.dart';
 import 'package:skyengine/pages/home_page.dart';
@@ -23,6 +24,7 @@ void main() {
       databasePathProvider: () async =>
           '${tempDir.path}${Platform.pathSeparator}$localMrpDatabaseFileName',
     );
+    final themeSettings = ThemeSettings.inMemory();
 
     try {
       await tester.pumpWidget(
@@ -35,6 +37,7 @@ void main() {
             initialMrpProvider: () async => null,
             openMrpStreamProvider: () => const Stream<MrpOpenRequest>.empty(),
             localMrpDatabase: database,
+            themeSettings: themeSettings,
             enableStartupRemoteConfig: false,
             enableStartupUpdateCheck: false,
           ),
@@ -58,8 +61,17 @@ void main() {
       await tester.tap(find.text('更多'));
       await tester.pump();
 
+      expect(find.byTooltip('切换到深色模式'), findsOneWidget);
+      expect(find.text('深色设置'), findsOneWidget);
       expect(find.text('模拟器设置'), findsOneWidget);
       expect(find.text('调试'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('切换到深色模式'));
+      await tester.pump();
+
+      expect(themeSettings.followSystem, isFalse);
+      expect(themeSettings.darkMode, isTrue);
+      expect(find.text('切换成功，关闭了深色跟随系统'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await database.close();
