@@ -11,6 +11,7 @@ import '../platform/android_mrp_open.dart';
 import '../services/app_store_api.dart';
 import '../services/local_mrp_database.dart';
 import '../services/local_mrp_files.dart';
+import '../services/theme_settings.dart';
 import 'more_page.dart';
 
 typedef AppStoreRunMrp = void Function(String path, {String? resolution});
@@ -51,6 +52,7 @@ class HomePage extends StatefulWidget {
   final InitialMrpProvider initialMrpProvider;
   final OpenMrpStreamProvider openMrpStreamProvider;
   final LocalMrpDatabase? localMrpDatabase;
+  final ThemeSettings? themeSettings;
   final bool enableStartupRemoteConfig;
   final bool enableStartupUpdateCheck;
 
@@ -63,6 +65,7 @@ class HomePage extends StatefulWidget {
     this.initialMrpProvider = _defaultInitialMrpProvider,
     this.openMrpStreamProvider = _defaultOpenMrpStreamProvider,
     this.localMrpDatabase,
+    this.themeSettings,
     this.enableStartupRemoteConfig = true,
     this.enableStartupUpdateCheck = true,
   });
@@ -87,6 +90,7 @@ class _HomePageState extends State<HomePage> {
   final LocalMrpFiles _localFiles = LocalMrpFiles();
   late final LocalMrpDatabase _mrpDatabase;
   late final bool _ownsMrpDatabase;
+  late final ThemeSettings _themeSettings;
   final AppStoreClient _appStoreClient = AppStoreClient(
     const AppStoreApiConfig(),
   );
@@ -107,6 +111,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _ownsMrpDatabase = widget.localMrpDatabase == null;
     _mrpDatabase = widget.localMrpDatabase ?? LocalMrpDatabase();
+    _themeSettings = widget.themeSettings ?? ThemeSettings.instance;
+    _themeSettings.addListener(_onThemeSettingsChanged);
     _loadMrpFiles();
     _mrpOpenSubscription = widget.openMrpStreamProvider().listen(
       _openImportedMrp,
@@ -554,12 +560,36 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _themeSettings.removeListener(_onThemeSettingsChanged);
     _mrpOpenSubscription?.cancel();
     _appStoreClient.close();
     if (_ownsMrpDatabase) {
       unawaited(_mrpDatabase.close());
     }
     super.dispose();
+  }
+
+  void _onThemeSettingsChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _toggleTheme() async {
+    if (!_themeSettings.isLoaded) {
+      await _themeSettings.ensureLoaded();
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final wasFollowingSystem = _themeSettings.followSystem;
+    unawaited(_themeSettings.toggleTheme(Theme.of(context).brightness));
+    if (wasFollowingSystem) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('切换成功，关闭了深色跟随系统')));
+    }
   }
 
   Future<void> _confirmRemoveMrp(LocalMrpFile file) async {
@@ -739,7 +769,25 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('SkyEngine')),
+      appBar: AppBar(
+        title: const Text('SkyEngine'),
+        actions: [
+          if (_selectedIndex == 2)
+            IconButton(
+              tooltip: Theme.of(context).brightness == Brightness.dark
+                  ? '切换到浅色模式'
+                  : '切换到深色模式',
+              onPressed: () {
+                unawaited(_toggleTheme());
+              },
+              icon: Icon(
+                Theme.of(context).brightness == Brightness.dark
+                    ? Icons.light_mode
+                    : Icons.dark_mode,
+              ),
+            ),
+        ],
+      ),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
@@ -756,7 +804,7 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
-          const MorePage(),
+          MorePage(themeSettings: _themeSettings),
         ],
       ),
       bottomNavigationBar: NavigationBar(
