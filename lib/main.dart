@@ -105,7 +105,10 @@ Future<Directory> _getWorkingDirectory() async {
 }
 
 Future<PickedMrpFile?> _pickMrpFile() async {
-  final result = await FilePicker.pickFiles(type: FileType.any);
+  final result = await FilePicker.pickFiles(
+    type: FileType.any,
+    lockParentWindow: Platform.isWindows,
+  );
   if (result == null || result.files.isEmpty) return null;
 
   final pickedFile = result.files.first;
