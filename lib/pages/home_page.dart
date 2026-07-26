@@ -9,6 +9,7 @@ import '../platform/android_app_update.dart';
 import '../platform/android_mythroad_assets.dart';
 import '../platform/android_mrp_open.dart';
 import '../services/app_store_api.dart';
+import '../services/emulator_update_checker.dart';
 import '../services/local_mrp_database.dart';
 import '../services/local_mrp_files.dart';
 import '../services/theme_settings.dart';
@@ -95,6 +96,7 @@ class _HomePageState extends State<HomePage> {
     const AppStoreApiConfig(),
   );
   final AndroidAppUpdate _androidAppUpdate = const AndroidAppUpdate();
+  late final EmulatorUpdateChecker _emulatorUpdateChecker;
   List<LocalMrpFile> _mrpFiles = [];
   String? _mrpDir;
   Directory? _workDir;
@@ -112,6 +114,10 @@ class _HomePageState extends State<HomePage> {
     _ownsMrpDatabase = widget.localMrpDatabase == null;
     _mrpDatabase = widget.localMrpDatabase ?? LocalMrpDatabase();
     _themeSettings = widget.themeSettings ?? ThemeSettings.instance;
+    _emulatorUpdateChecker = EmulatorUpdateChecker.android(
+      appStoreClient: _appStoreClient,
+      androidAppUpdate: _androidAppUpdate,
+    );
     _themeSettings.addListener(_onThemeSettingsChanged);
     _loadMrpFiles();
     _mrpOpenSubscription = widget.openMrpStreamProvider().listen(
@@ -290,43 +296,52 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _checkAppUpdate() async {
-    if (!Platform.isAndroid || _checkingUpdate || _updatePromptShown) {
+  Future<void> _checkAppUpdate({bool showResult = false}) async {
+    if (_checkingUpdate || (!showResult && _updatePromptShown)) {
       return;
     }
-    _checkingUpdate = true;
+    setState(() => _checkingUpdate = true);
     try {
-      final versionCode = await _androidAppUpdate.getVersionCode();
-      final workDir = _workDir;
-      if (versionCode != null && workDir != null) {
-        final updatesDir = Directory(
-          '${workDir.path}${Platform.pathSeparator}updates',
-        );
-        try {
-          await _appStoreClient.cleanupInstalledEmulatorUpdates(
-            destinationDir: updatesDir,
-            installedVersionCode: versionCode,
-          );
-        } catch (error, stackTrace) {
-          debugPrintStack(stackTrace: stackTrace);
-          debugPrint('Failed to clean installed update packages: $error');
-        }
-      }
-      final update = await _appStoreClient.checkEmulatorUpdate(
-        versionCode: versionCode,
+      final result = await _emulatorUpdateChecker.check(
+        workingDirectory: _workDir,
       );
-      final latest = update.latest;
-      if (!mounted || !update.updateAvailable || latest == null) {
+      if (!mounted) {
         return;
       }
+      if (result.status == EmulatorUpdateCheckStatus.unsupported) {
+        if (showResult) {
+          _showUpdateCheckMessage('当前平台暂不支持应用内更新');
+        }
+        return;
+      }
+      if (result.status == EmulatorUpdateCheckStatus.upToDate) {
+        if (mounted && showResult) {
+          _showUpdateCheckMessage('已是最新版本');
+        }
+        return;
+      }
+      final latest = result.latest!;
       _updatePromptShown = true;
       await _showAppUpdateDialog(latest);
     } catch (error, stackTrace) {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('Failed to check app update: $error');
+      if (mounted && showResult) {
+        _showUpdateCheckMessage('检查更新失败，请稍后重试');
+      }
     } finally {
-      _checkingUpdate = false;
+      if (mounted) {
+        setState(() => _checkingUpdate = false);
+      } else {
+        _checkingUpdate = false;
+      }
     }
+  }
+
+  void _showUpdateCheckMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _showAppUpdateDialog(AppStoreEmulatorVersion version) async {
@@ -810,7 +825,11 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
-          MorePage(themeSettings: _themeSettings),
+          MorePage(
+            themeSettings: _themeSettings,
+            checkingForUpdate: _checkingUpdate,
+            onCheckForUpdate: () => _checkAppUpdate(showResult: true),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(

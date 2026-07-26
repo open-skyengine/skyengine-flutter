@@ -11,6 +11,7 @@
  *     --server https://example.com \
  *     --token mrp_at_xxxx \
  *     --file build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+ *     --architecture arm64-v8a \
  *     --changelog "修复若干问题"
  *
  *   # 使用外部下载地址（version_code 必填）
@@ -35,6 +36,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const ARCHITECTURES = ['universal', 'arm64-v8a', 'armeabi-v7a'];
+
 function usage(exitCode) {
   console.log(`用法: node tool/publish_emulator_apk.js [选项]
 
@@ -43,6 +46,8 @@ function usage(exitCode) {
   --token <token>         访问令牌 mrp_at_...（或环境变量 MRP_ACCESS_TOKEN）
   --file <path>           APK 文件路径（与 --download-url 二选一）
   --download-url <url>    APK 外部下载地址（与 --file 二选一）
+  --architecture <abi>    APK 架构：universal、arm64-v8a、armeabi-v7a
+                          （默认 universal）
   --fetch-file            将 download_url 的文件下载到服务器（须为 http(s) 地址），
                           version_code/version/file_size/checksum 自动从文件获取
   --version-code <int>    版本号，使用 --download-url 且未开启 --fetch-file 时必填
@@ -73,6 +78,7 @@ function parseArgs(argv) {
       case '--token': opts.token = next(); break;
       case '--file': opts.file = next(); break;
       case '--download-url': opts.downloadUrl = next(); break;
+      case '--architecture': opts.architecture = next(); break;
       case '--fetch-file': opts.fetchFile = true; break;
       case '--version-code': opts.versionCode = next(); break;
       case '--version': opts.version = next(); break;
@@ -136,6 +142,10 @@ async function main() {
   if (opts.fetchFile && (opts.checksum || opts.fileSize !== undefined)) {
     fail('--fetch-file 开启后 checksum/file_size 由服务端计算，不能同时提供 --checksum / --file-size');
   }
+  opts.architecture = opts.architecture || 'universal';
+  if (!ARCHITECTURES.includes(opts.architecture)) {
+    fail(`--architecture 必须为以下值之一: ${ARCHITECTURES.join('、')}`);
+  }
   const changelogSources = [opts.changelog, opts.changelogFile, opts.changelogMd].filter((v) => v !== undefined);
   if (changelogSources.length > 1) fail('--changelog、--changelog-file、--changelog-md 只能提供其一');
   if (opts.changelogMd && !opts.version) fail('使用 --changelog-md 时 --version 必填');
@@ -171,6 +181,7 @@ async function main() {
     const form = new FormData();
     if (opts.versionCode !== undefined) form.set('version_code', String(opts.versionCode));
     if (opts.version) form.set('version', opts.version);
+    form.set('architecture', opts.architecture);
     if (changelog) form.set('changelog', changelog);
     form.set('force_update', opts.forceUpdate ? 'true' : 'false');
     form.set('file', await fileToBlob(filePath), path.basename(filePath));
@@ -179,6 +190,7 @@ async function main() {
   } else {
     const payload = {
       download_url: opts.downloadUrl,
+      architecture: opts.architecture,
       force_update: !!opts.forceUpdate,
     };
     if (opts.versionCode !== undefined) payload.version_code = opts.versionCode;
@@ -191,6 +203,7 @@ async function main() {
     body = JSON.stringify(payload);
   }
 
+  console.log(`发布架构: ${opts.architecture}`);
   console.log(`发布到: ${url}`);
   let response;
   try {

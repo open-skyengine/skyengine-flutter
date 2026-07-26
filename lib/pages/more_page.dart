@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/theme_settings.dart';
@@ -7,8 +9,15 @@ import 'emulator_settings_page.dart';
 
 class MorePage extends StatelessWidget {
   final ThemeSettings? themeSettings;
+  final Future<void> Function()? onCheckForUpdate;
+  final bool checkingForUpdate;
 
-  const MorePage({super.key, this.themeSettings});
+  const MorePage({
+    super.key,
+    this.themeSettings,
+    this.onCheckForUpdate,
+    this.checkingForUpdate = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +33,20 @@ class MorePage extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const EmulatorSettingsPage()),
             );
           },
+        ),
+        ListTile(
+          leading: const Icon(Icons.system_update_alt),
+          title: const Text('检查更新'),
+          subtitle: checkingForUpdate ? const Text('正在检查...') : null,
+          trailing: checkingForUpdate
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh),
+          onTap: checkingForUpdate || onCheckForUpdate == null
+              ? null
+              : () => unawaited(onCheckForUpdate!()),
         ),
         ListTile(
           leading: const Icon(Icons.bug_report),

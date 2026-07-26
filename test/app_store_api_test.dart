@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -6,6 +7,59 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:skyengine/services/app_store_api.dart';
 
 void main() {
+  test('maps Android runtime ABIs to emulator package architectures', () {
+    expect(
+      emulatorArchitectureForAbi(Abi.androidArm64),
+      kEmulatorArchitectureArm64,
+    );
+    expect(
+      emulatorArchitectureForAbi(Abi.androidArm),
+      kEmulatorArchitectureArm,
+    );
+  });
+
+  test(
+    'emulator versions default to universal and preserve download ABI',
+    () async {
+      final legacyVersion = AppStoreEmulatorVersion.fromJson({
+        'id': 8,
+        'platform': 'android',
+        'version_code': 41,
+      });
+      expect(legacyVersion.architecture, kEmulatorArchitectureUniversal);
+
+      final client = AppStoreClient(const AppStoreApiConfig());
+      final tempDir = await Directory.systemTemp.createTemp(
+        'skyengine_emulator_architecture_test_',
+      );
+      final version = AppStoreEmulatorVersion(
+        id: 9,
+        platform: 'android',
+        architecture: kEmulatorArchitectureArm64,
+        versionCode: 42,
+        version: '1.2.3',
+        changelog: '',
+        downloadUrl: null,
+        fileSize: 0,
+        checksum: '',
+        forceUpdate: false,
+      );
+
+      try {
+        final request = await client.prepareEmulatorVersionDownload(
+          version: version,
+          destinationDir: tempDir,
+        );
+        expect(request.uri.queryParameters, {
+          'architecture': kEmulatorArchitectureArm64,
+        });
+      } finally {
+        client.close();
+        await tempDir.delete(recursive: true);
+      }
+    },
+  );
+
   test('AppStoreClient signs, searches, paginates, and downloads', () async {
     final requests = <Uri>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -55,9 +109,13 @@ void main() {
       expect(config.hosts.single.domain, 'api.example.com');
       expect(config.hosts.single.ip, '192.168.1.10');
 
-      final update = await client.checkEmulatorUpdate(versionCode: 1);
+      final update = await client.checkEmulatorUpdate(
+        versionCode: 1,
+        architecture: kEmulatorArchitectureArm64,
+      );
       expect(update.updateAvailable, isTrue);
       expect(update.latest!.versionCode, 42);
+      expect(update.latest!.architecture, kEmulatorArchitectureArm64);
 
       final apk = await client.downloadEmulatorVersion(
         version: update.latest!,
@@ -345,16 +403,22 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         ],
       });
     } else if (path == '/api/app/v1/emulator/updates') {
-      expect(query, {'platform': 'android', 'version_code': '1'});
+      expect(query, {
+        'platform': 'android',
+        'architecture': 'arm64-v8a',
+        'version_code': '1',
+      });
       _writeJson(request.response, {
         'update_available': true,
         'latest': {
           'id': 9,
           'platform': 'android',
+          'architecture': 'arm64-v8a',
           'version_code': 42,
           'version': '1.2.3',
           'changelog': 'fix',
-          'download_url': '/api/app/v1/emulator/versions/9/download',
+          'download_url':
+              '/api/app/v1/emulator/versions/9/download?architecture=arm64-v8a',
           'file_size': 8,
           'checksum': 'test-apk',
           'force_update': false,
@@ -362,7 +426,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         },
       });
     } else if (path == '/api/app/v1/emulator/versions/9/download') {
-      expect(query, isEmpty);
+      expect(query, {'architecture': 'arm64-v8a'});
       request.response.headers.contentType = ContentType(
         'application',
         'vnd.android.package-archive',

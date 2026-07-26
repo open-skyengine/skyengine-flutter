@@ -20,6 +20,20 @@ fun signingProperty(name: String): String? =
     (keystoreProperties.getProperty(name) ?: providers.environmentVariable(name).orNull)
         ?.takeIf { it.isNotBlank() }
 
+val androidAbiByTargetPlatform =
+    mapOf(
+        "android-arm" to "armeabi-v7a",
+        "android-arm64" to "arm64-v8a",
+    )
+val targetAndroidAbis =
+    providers.gradleProperty("target-platform").orNull
+        ?.split(',')
+        ?.mapNotNull(androidAbiByTargetPlatform::get)
+        ?.distinct()
+        ?.takeIf(List<String>::isNotEmpty)
+        ?: androidAbiByTargetPlatform.values.toList()
+val splitPerAbi = providers.gradleProperty("split-per-abi").orNull?.toBoolean() == true
+
 val packageMythroadSystem by tasks.registering(Zip::class) {
     archiveFileName.set("mythroad_system.zip")
     destinationDirectory.set(mythroadSystemAssetsDir)
@@ -48,8 +62,11 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        // A split build configures ABI splits itself; other builds follow Flutter's target platforms.
+        if (!splitPerAbi) {
+            ndk {
+                abiFilters += targetAndroidAbis
+            }
         }
 
         externalNativeBuild {
