@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
@@ -8,6 +9,20 @@ import 'package:crypto/crypto.dart';
 const String kDefaultAppStoreBaseUrl = 'https://mrp.jysafe.cn/api/app/v1';
 const String kDefaultAppStoreKey = 'dev-app-key';
 const String kDefaultAppStoreSecret = 'dev-app-secret-change-me';
+const String kEmulatorArchitectureUniversal = 'universal';
+const String kEmulatorArchitectureArm64 = 'arm64-v8a';
+const String kEmulatorArchitectureArm = 'armeabi-v7a';
+
+String emulatorArchitectureForAbi(Abi abi) {
+  return switch (abi) {
+    Abi.androidArm64 => kEmulatorArchitectureArm64,
+    Abi.androidArm => kEmulatorArchitectureArm,
+    _ => kEmulatorArchitectureUniversal,
+  };
+}
+
+String currentEmulatorArchitecture() =>
+    emulatorArchitectureForAbi(Abi.current());
 
 const _emptyBodySha256 =
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -193,6 +208,7 @@ class AppStoreVersion {
 class AppStoreEmulatorVersion {
   final int id;
   final String platform;
+  final String architecture;
   final int versionCode;
   final String version;
   final String changelog;
@@ -204,6 +220,7 @@ class AppStoreEmulatorVersion {
   const AppStoreEmulatorVersion({
     required this.id,
     required this.platform,
+    this.architecture = kEmulatorArchitectureUniversal,
     required this.versionCode,
     required this.version,
     required this.changelog,
@@ -217,6 +234,10 @@ class AppStoreEmulatorVersion {
     return AppStoreEmulatorVersion(
       id: _readInt(json['id']),
       platform: _readString(json['platform']),
+      architecture: _readNonEmptyString(
+        json['architecture'],
+        fallback: kEmulatorArchitectureUniversal,
+      ),
       versionCode: _readInt(json['version_code']),
       version: _readString(json['version']),
       changelog: _readString(json['changelog']),
@@ -497,11 +518,13 @@ class AppStoreClient {
   Future<AppStoreEmulatorUpdate> checkEmulatorUpdate({
     int? versionCode,
     String platform = 'android',
+    String architecture = kEmulatorArchitectureUniversal,
   }) async {
     final json = await _getJson(
       '/emulator/updates',
       _queryParams({
         'platform': platform,
+        'architecture': architecture,
         if (versionCode != null) 'version_code': '$versionCode',
       }),
     );
@@ -585,7 +608,10 @@ class AppStoreClient {
       target: target,
     );
     final uri = version.downloadUrl == null
-        ? _buildUri('/emulator/versions/${version.id}/download', const {})
+        ? _buildUri(
+            '/emulator/versions/${version.id}/download',
+            _queryParams({'architecture': version.architecture}),
+          )
         : _resolveApiUri(version.downloadUrl!);
 
     return AppStoreEmulatorDownloadRequest(
@@ -1185,6 +1211,11 @@ int _readInt(dynamic value, {int fallback = 0}) {
 }
 
 String _readString(dynamic value) => _nullableString(value) ?? '';
+
+String _readNonEmptyString(dynamic value, {required String fallback}) {
+  final result = _nullableString(value)?.trim();
+  return result == null || result.isEmpty ? fallback : result;
+}
 
 String? _nullableString(dynamic value) {
   if (value == null) {

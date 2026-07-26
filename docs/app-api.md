@@ -1,6 +1,6 @@
 # APP 端 HTTP API 对接文档
 
-本文档描述 APP 端使用的 HTTP 接口。接口统一使用 HMAC-SHA256 签名验证，只返回可对终端开放的 active 应用、active 厂商、published 版本和 active 机型包。
+本文档描述 APP 端使用的 HTTP 接口。接口统一使用 HMAC-SHA256 签名验证，只返回可对终端开放的 active 应用、active 厂商、published 版本和 active 分辨率包。
 
 ## 1. 基础信息
 
@@ -151,7 +151,7 @@ function sign({ method, path, query = '', timestamp, nonce, body = '', secret })
 GET /api/app/v1/apps
 ```
 
-返回 active 厂商下的 active 应用。该接口固定只返回 `app` 类型，并且应用至少有一个 published 版本和 active 机型包。
+返回 active 厂商下的 active 应用。该接口固定只返回 `app` 类型，并且应用至少有一个 published 版本和 active 分辨率包。
 
 请求参数：
 
@@ -247,10 +247,8 @@ GET /api/app/v1/apps/{app_id}/versions
       "packages": [
         {
           "id": 21,
-          "model": {
+          "resolution": {
             "id": 3,
-            "name": "VMRP",
-            "code": "vmrp",
             "resolution": "240x320"
           },
           "file_size": 123456,
@@ -299,7 +297,6 @@ GET /api/app/v1/apps/{app_id}/versions/{version_code}/download
 |--------|------|
 | `X-App-ID` | 应用外部 ID |
 | `X-Version-Code` | 版本号 |
-| `X-Model-Code` | 命中的机型编码 |
 
 没有匹配包时返回：
 
@@ -322,6 +319,7 @@ GET /api/app/v1/emulator/updates
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `platform` | string | 否 | 平台，默认 `android` |
+| `architecture` | string | 否 | APK 架构：`universal`、`arm64-v8a`、`armeabi-v7a`；默认 `universal`。指定架构没有独立包时回退通用包 |
 | `version_code` | uint32 | 否 | 当前客户端版本号 |
 | `current_version_code` | uint32 | 否 | 当前客户端版本号，作用同 `version_code` |
 
@@ -332,11 +330,13 @@ GET /api/app/v1/emulator/updates
   "update_available": true,
   "latest": {
     "id": 9,
+    "package_id": 12,
     "platform": "android",
+    "architecture": "arm64-v8a",
     "version_code": 42,
     "version": "1.2.3",
     "changelog": "更新说明",
-    "download_url": "/api/app/v1/emulator/versions/9/download",
+    "download_url": "/api/app/v1/emulator/versions/9/download?architecture=arm64-v8a",
     "file_size": 12345678,
     "checksum": "sha256",
     "force_update": false,
@@ -366,6 +366,7 @@ GET /api/app/v1/emulator/versions/{id}/download
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `id` | uint | 是 | 路径参数，模拟器版本 ID |
+| `architecture` | string | 否 | APK 架构，默认 `universal`；指定架构没有独立包时回退通用包 |
 
 响应：
 
@@ -382,6 +383,7 @@ GET /api/app/v1/emulator/versions/{id}/download
 |--------|------|
 | `X-Emulator-Version-Code` | 模拟器版本号 |
 | `X-Emulator-Version` | 模拟器版本号字符串 |
+| `X-Emulator-Architecture` | 实际返回的 APK 架构；发生回退时为 `universal` |
 
 指定版本不存在或未发布时返回 `404`。
 
@@ -402,7 +404,7 @@ GET /api/app/v1/config
   "hosts": [
     {
       "domain": "api.example.com",
-      "ip": "192.168.1.10"
+      "ip": "192.168.1.10:8080"
     }
   ]
 }
@@ -414,7 +416,7 @@ GET /api/app/v1/config
 |------|------|
 | `hosts` | 域名映射数组 |
 | `hosts[].domain` | 域名 |
-| `hosts[].ip` | IP |
+| `hosts[].ip` | IP，或 `IP:端口`；IPv6 带端口时使用 `[IPv6]:端口` |
 
 ## 5. 状态码
 
