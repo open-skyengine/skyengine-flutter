@@ -20,6 +20,25 @@ The script generates one APK per Android phone ABI:
 Install the APK matching the target device ABI. On modern phones this is usually
 `app-arm64-v8a-release.apk`.
 
+Tagged CI releases publish three APKs while keeping the original unsuffixed
+filename for the universal package:
+
+- `skyengine-v<version>.apk` (universal)
+- `skyengine-v<version>-arm64-v8a.apk`
+- `skyengine-v<version>-armeabi-v7a.apk`
+
+The release workflow also publishes each APK to the emulator update server under
+the same version code. Configure `MRP_SERVER` and an `MRP_ACCESS_TOKEN` secret
+with the `emulator_apk:publish` scope. To publish one package manually:
+
+```powershell
+$env:MRP_SERVER = "https://example.com"
+$env:MRP_ACCESS_TOKEN = "mrp_at_xxxx"
+node tool/publish_emulator_apk.js `
+  --file build/app/outputs/flutter-apk/app-arm64-v8a-release.apk `
+  --architecture arm64-v8a
+```
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
