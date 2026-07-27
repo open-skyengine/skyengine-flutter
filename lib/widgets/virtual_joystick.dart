@@ -5,6 +5,46 @@ import 'package:flutter/material.dart';
 
 enum JoystickDirection { up, down, left, right }
 
+class VirtualJoystickConfirmButton extends StatelessWidget {
+  final double size;
+  final VoidCallback onPressed;
+  final VoidCallback onReleased;
+
+  const VirtualJoystickConfirmButton({
+    super.key,
+    required this.onPressed,
+    required this.onReleased,
+    this.size = 84,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '确定',
+      child: GestureDetector(
+        key: const ValueKey('virtual-joystick-confirm-button'),
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => onPressed(),
+        onTapUp: (_) => onReleased(),
+        onTapCancel: onReleased,
+        child: SizedBox.square(
+          dimension: size,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[800],
+            ),
+            child: const Center(
+              child: Text('确定', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class VirtualJoystick extends StatefulWidget {
   final double size;
   final ValueChanged<JoystickDirection> onDirectionPressed;
