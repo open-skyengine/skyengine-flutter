@@ -176,6 +176,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   static const double _keypadButtonWidth = 84;
   static const double _keypadButtonHeight = 44;
   static const double _joystickSize = 152;
+  static const double _joystickActionGap = 64;
   static const double _landscapeKeypadGap = 12;
   static const double _landscapeKeypadColumnGap = 6;
   static const double _landscapeKeypadMinWidth = 120;
@@ -1256,7 +1257,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
     return switch (_keypadMode) {
       _KeypadMode.directional => _buildSoftKeypad(),
-      _KeypadMode.joystick => _buildJoystickActionKeys(buttonWidth: sideWidth),
+      _KeypadMode.joystick => _buildJoystickConfirmKey(),
       _KeypadMode.numeric => _buildNumericKeypadHalf(const [
         [('3', SkyEngineKey.key3)],
         [('6', SkyEngineKey.key6)],
@@ -1371,8 +1372,8 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildJoystick(),
-        const SizedBox(width: _keypadColumnGap),
-        _buildJoystickActionKeys(),
+        const SizedBox(width: _joystickActionGap),
+        _buildJoystickConfirmKey(),
       ],
     );
   }
@@ -1390,16 +1391,14 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     );
   }
 
-  Widget _buildJoystickActionKeys({double buttonWidth = _keypadButtonWidth}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _keyButton('左软键', SkyEngineKey.softLeft, width: buttonWidth),
-        const SizedBox(height: _keypadRowGap),
-        _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
-        const SizedBox(height: _keypadRowGap),
-        _keyButton('右软键', SkyEngineKey.softRight, width: buttonWidth),
-      ],
+  Widget _buildJoystickConfirmKey() {
+    return VirtualJoystickConfirmButton(
+      size: _keypadButtonWidth,
+      onPressed: () {
+        unawaited(_vibrateVirtualKey());
+        _engine?.sendKeyDown(SkyEngineKey.select);
+      },
+      onReleased: () => _engine?.sendKeyUp(SkyEngineKey.select),
     );
   }
 

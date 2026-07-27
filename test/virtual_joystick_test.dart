@@ -3,6 +3,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:skyengine/widgets/virtual_joystick.dart';
 
 void main() {
+  testWidgets('confirm button is circular and emits a complete key press', (
+    tester,
+  ) async {
+    final events = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: VirtualJoystickConfirmButton(
+            onPressed: () => events.add('down'),
+            onReleased: () => events.add('up'),
+          ),
+        ),
+      ),
+    );
+
+    final button = find.byKey(
+      const ValueKey('virtual-joystick-confirm-button'),
+    );
+    expect(tester.getSize(button), const Size.square(84));
+
+    final decoratedBox = tester.widget<DecoratedBox>(
+      find.descendant(of: button, matching: find.byType(DecoratedBox)),
+    );
+    final decoration = decoratedBox.decoration as BoxDecoration;
+    expect(decoration.shape, BoxShape.circle);
+
+    await tester.tap(button);
+    expect(events, ['down', 'up']);
+  });
+
   testWidgets('joystick changes and releases directions while dragging', (
     tester,
   ) async {
