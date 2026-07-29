@@ -63,12 +63,15 @@ class VirtualJoystick extends StatefulWidget {
 
 class _VirtualJoystickState extends State<VirtualJoystick> {
   static const double _deadZoneRatio = 0.14;
+  static const double _oppositeDirectionSwitchRatio = 0.05;
   static const double _diagonalAxisRatio = 0.42;
   static const double _knobTravelRatio = 0.25;
 
   int? _activePointer;
   Offset _knobOffset = Offset.zero;
   Set<JoystickDirection> _pressedDirections = const {};
+  JoystickDirection? _lastHorizontalDirection;
+  JoystickDirection? _lastVerticalDirection;
 
   void _handlePointerDown(PointerDownEvent event) {
     if (_activePointer != null) {
@@ -91,6 +94,8 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
     }
     _activePointer = null;
     _updateDirections(const {});
+    _lastHorizontalDirection = null;
+    _lastVerticalDirection = null;
     if (mounted) {
       setState(() => _knobOffset = Offset.zero);
     }
@@ -110,24 +115,69 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
   }
 
   Set<JoystickDirection> _directionsForDelta(Offset delta) {
-    if (delta.distance <= widget.size * _deadZoneRatio) {
-      return const {};
-    }
-
     final horizontal = delta.dx.abs();
     final vertical = delta.dy.abs();
     final directions = <JoystickDirection>{};
-    if (horizontal >= vertical * _diagonalAxisRatio) {
-      directions.add(
-        delta.dx < 0 ? JoystickDirection.left : JoystickDirection.right,
-      );
+    final isOutsideDeadZone = delta.distance > widget.size * _deadZoneRatio;
+
+    if (isOutsideDeadZone) {
+      if (horizontal >= vertical * _diagonalAxisRatio) {
+        directions.add(
+          delta.dx < 0 ? JoystickDirection.left : JoystickDirection.right,
+        );
+      }
+      if (vertical >= horizontal * _diagonalAxisRatio) {
+        directions.add(
+          delta.dy < 0 ? JoystickDirection.up : JoystickDirection.down,
+        );
+      }
+    } else {
+      // A reversal necessarily crosses the dead zone. Remember the previous
+      // axis so the opposite direction can engage before leaving it again.
+      final switchThreshold = widget.size * _oppositeDirectionSwitchRatio;
+      if (horizontal >= vertical * _diagonalAxisRatio &&
+          horizontal >= switchThreshold) {
+        final direction = delta.dx < 0
+            ? JoystickDirection.left
+            : JoystickDirection.right;
+        if (_shouldEngageInsideDeadZone(direction, _lastHorizontalDirection)) {
+          directions.add(direction);
+        }
+      }
+      if (vertical >= horizontal * _diagonalAxisRatio &&
+          vertical >= switchThreshold) {
+        final direction = delta.dy < 0
+            ? JoystickDirection.up
+            : JoystickDirection.down;
+        if (_shouldEngageInsideDeadZone(direction, _lastVerticalDirection)) {
+          directions.add(direction);
+        }
+      }
     }
-    if (vertical >= horizontal * _diagonalAxisRatio) {
-      directions.add(
-        delta.dy < 0 ? JoystickDirection.up : JoystickDirection.down,
-      );
-    }
+
+    _rememberDirections(directions);
     return directions;
+  }
+
+  bool _shouldEngageInsideDeadZone(
+    JoystickDirection direction,
+    JoystickDirection? lastDirection,
+  ) {
+    return _pressedDirections.contains(direction) ||
+        (lastDirection != null && direction != lastDirection);
+  }
+
+  void _rememberDirections(Set<JoystickDirection> directions) {
+    for (final direction in directions) {
+      switch (direction) {
+        case JoystickDirection.left:
+        case JoystickDirection.right:
+          _lastHorizontalDirection = direction;
+        case JoystickDirection.up:
+        case JoystickDirection.down:
+          _lastVerticalDirection = direction;
+      }
+    }
   }
 
   void _updateDirections(Set<JoystickDirection> directions) {
@@ -135,13 +185,27 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
       return;
     }
 
-    for (final direction in _pressedDirections.difference(directions)) {
+    final previousDirections = _pressedDirections;
+    _pressedDirections = Set.unmodifiable(directions);
+    final removedDirections = previousDirections.difference(directions);
+    final retainedDirections = previousDirections.intersection(directions);
+    final replacesOverlappingState =
+        removedDirections.isNotEmpty && retainedDirections.isNotEmpty;
+
+    // Some MRP runtimes clear their current direction on any key-up event.
+    // Replace an overlapping combination so retained keys are asserted last.
+    final directionsToRelease = replacesOverlappingState
+        ? previousDirections
+        : removedDirections;
+    final directionsToPress = replacesOverlappingState
+        ? directions
+        : directions.difference(previousDirections);
+    for (final direction in directionsToRelease) {
       widget.onDirectionReleased(direction);
     }
-    for (final direction in directions.difference(_pressedDirections)) {
+    for (final direction in directionsToPress) {
       widget.onDirectionPressed(direction);
     }
-    _pressedDirections = directions;
   }
 
   void _releaseAllDirections() {

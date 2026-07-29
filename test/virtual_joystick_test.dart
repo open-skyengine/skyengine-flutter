@@ -67,6 +67,129 @@ void main() {
     ]);
   });
 
+  testWidgets('joystick reasserts up after rotating clockwise from left', (
+    tester,
+  ) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: VirtualJoystick(
+            onDirectionPressed: (direction) => events.add('down:$direction'),
+            onDirectionReleased: (direction) => events.add('up:$direction'),
+          ),
+        ),
+      ),
+    );
+
+    final joystick = find.byKey(const ValueKey('virtual-joystick'));
+    final center = tester.getCenter(joystick);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveTo(center + const Offset(-60, 0));
+    await gesture.moveTo(center + const Offset(-45, -45));
+    await gesture.moveTo(center + const Offset(0, -60));
+    await gesture.up();
+    await tester.pump();
+
+    expect(events, [
+      'down:${JoystickDirection.left}',
+      'down:${JoystickDirection.up}',
+      'up:${JoystickDirection.left}',
+      'up:${JoystickDirection.up}',
+      'down:${JoystickDirection.up}',
+      'up:${JoystickDirection.up}',
+    ]);
+  });
+
+  testWidgets('joystick engages the opposite direction inside the dead zone', (
+    tester,
+  ) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: VirtualJoystick(
+            onDirectionPressed: (direction) => events.add('down:$direction'),
+            onDirectionReleased: (direction) => events.add('up:$direction'),
+          ),
+        ),
+      ),
+    );
+
+    final joystick = find.byKey(const ValueKey('virtual-joystick'));
+    final center = tester.getCenter(joystick);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveTo(center + const Offset(-60, 0));
+    await gesture.moveTo(center);
+    await gesture.moveTo(center + const Offset(10, 0));
+    await gesture.moveTo(center + const Offset(18, 0));
+    await gesture.up();
+    await tester.pump();
+
+    expect(events, [
+      'down:${JoystickDirection.left}',
+      'up:${JoystickDirection.left}',
+      'down:${JoystickDirection.right}',
+      'up:${JoystickDirection.right}',
+    ]);
+  });
+
+  testWidgets('joystick directly switches between opposite directions', (
+    tester,
+  ) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: VirtualJoystick(
+            onDirectionPressed: (direction) => events.add('down:$direction'),
+            onDirectionReleased: (direction) => events.add('up:$direction'),
+          ),
+        ),
+      ),
+    );
+
+    final joystick = find.byKey(const ValueKey('virtual-joystick'));
+    final center = tester.getCenter(joystick);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveTo(center + const Offset(-60, 0));
+    await gesture.moveTo(center + const Offset(60, 0));
+    await gesture.up();
+    await tester.pump();
+
+    expect(events, [
+      'down:${JoystickDirection.left}',
+      'up:${JoystickDirection.left}',
+      'down:${JoystickDirection.right}',
+      'up:${JoystickDirection.right}',
+    ]);
+  });
+
+  testWidgets('joystick ignores near-center input without a prior direction', (
+    tester,
+  ) async {
+    final events = <JoystickDirection>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: VirtualJoystick(
+            onDirectionPressed: events.add,
+            onDirectionReleased: events.add,
+          ),
+        ),
+      ),
+    );
+
+    final joystick = find.byKey(const ValueKey('virtual-joystick'));
+    final center = tester.getCenter(joystick);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveTo(center + const Offset(10, 0));
+    await gesture.up();
+    await tester.pump();
+
+    expect(events, isEmpty);
+  });
+
   testWidgets('joystick supports diagonal input and releases on cancel', (
     tester,
   ) async {
