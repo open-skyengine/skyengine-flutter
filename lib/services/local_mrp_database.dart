@@ -4,24 +4,32 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../models/keypad_mode.dart';
+
 const localMrpDatabaseFileName = 'local_mrp.db';
 
 class LocalMrpRecord {
   final String path;
   final String hash;
   final String? resolution;
+  final DateTime addedAt;
+  final KeypadMode? keypadMode;
 
-  const LocalMrpRecord({
+  LocalMrpRecord({
     required this.path,
     required this.hash,
     this.resolution,
-  });
+    DateTime? addedAt,
+    this.keypadMode,
+  }) : addedAt = addedAt ?? DateTime.now();
 
   factory LocalMrpRecord.fromMap(Map<String, Object?> map) {
     return LocalMrpRecord(
       path: map['path']! as String,
       hash: map['hash']! as String,
       resolution: map['resolution'] as String?,
+      addedAt: DateTime.fromMillisecondsSinceEpoch(map['added_at']! as int),
+      keypadMode: parseKeypadMode(map['keypad_mode'] as String?),
     );
   }
 }
@@ -50,19 +58,37 @@ class LocalMrpDatabase {
     final database = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 3,
         onCreate: (database, version) async {
           await database.execute('''
             CREATE TABLE local_mrp_files (
               path TEXT PRIMARY KEY,
               hash TEXT NOT NULL,
-              resolution TEXT
+              resolution TEXT,
+              added_at INTEGER NOT NULL,
+              keypad_mode TEXT
             )
           ''');
           await database.execute(
             'CREATE INDEX local_mrp_files_hash_idx ON local_mrp_files(hash)',
           );
           created = true;
+        },
+        onUpgrade: (database, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await database.execute(
+              'ALTER TABLE local_mrp_files '
+              'ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0',
+            );
+            await database.update('local_mrp_files', {
+              'added_at': DateTime.now().millisecondsSinceEpoch,
+            }, where: 'added_at = 0');
+          }
+          if (oldVersion < 3) {
+            await database.execute(
+              'ALTER TABLE local_mrp_files ADD COLUMN keypad_mode TEXT',
+            );
+          }
         },
       ),
     );
@@ -85,7 +111,7 @@ class LocalMrpDatabase {
   Future<List<LocalMrpRecord>> records() async {
     final rows = await _requireDatabase().query(
       'local_mrp_files',
-      orderBy: 'path COLLATE NOCASE',
+      orderBy: 'added_at DESC, path COLLATE NOCASE',
     );
     return rows.map(LocalMrpRecord.fromMap).toList();
   }
@@ -119,26 +145,36 @@ class LocalMrpDatabase {
     required String path,
     required String hash,
     String? resolution,
+    DateTime? addedAt,
+    KeypadMode? keypadMode,
   }) async {
     final normalizedPath = _normalizePath(path);
     await _requireDatabase().transaction((transaction) async {
       var effectiveResolution = resolution;
-      if (effectiveResolution == null) {
-        final rows = await transaction.query(
-          'local_mrp_files',
-          columns: ['resolution'],
-          where: 'path = ?',
-          whereArgs: [normalizedPath],
-          limit: 1,
+      var effectiveAddedAt = addedAt ?? DateTime.now();
+      var effectiveKeypadMode = keypadMode;
+      final rows = await transaction.query(
+        'local_mrp_files',
+        columns: ['resolution', 'added_at', 'keypad_mode'],
+        where: 'path = ?',
+        whereArgs: [normalizedPath],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        effectiveResolution ??= rows.single['resolution'] as String?;
+        effectiveAddedAt = DateTime.fromMillisecondsSinceEpoch(
+          rows.single['added_at']! as int,
         );
-        if (rows.isNotEmpty) {
-          effectiveResolution = rows.single['resolution'] as String?;
-        }
+        effectiveKeypadMode ??= parseKeypadMode(
+          rows.single['keypad_mode'] as String?,
+        );
       }
       await transaction.insert('local_mrp_files', {
         'path': normalizedPath,
         'hash': hash,
         'resolution': effectiveResolution,
+        'added_at': effectiveAddedAt.millisecondsSinceEpoch,
+        'keypad_mode': effectiveKeypadMode?.name,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
@@ -147,6 +183,15 @@ class LocalMrpDatabase {
     await _requireDatabase().update(
       'local_mrp_files',
       {'resolution': resolution},
+      where: 'path = ?',
+      whereArgs: [_normalizePath(path)],
+    );
+  }
+
+  Future<void> updateKeypadMode(String path, KeypadMode keypadMode) async {
+    await _requireDatabase().update(
+      'local_mrp_files',
+      {'keypad_mode': keypadMode.name},
       where: 'path = ?',
       whereArgs: [_normalizePath(path)],
     );
@@ -199,6 +244,8 @@ class LocalMrpDatabase {
       'path': _normalizePath(record.path),
       'hash': record.hash,
       'resolution': record.resolution,
+      'added_at': record.addedAt.millisecondsSinceEpoch,
+      'keypad_mode': record.keypadMode?.name,
     };
   }
 
