@@ -64,13 +64,21 @@ class _MyAppState extends State<MyApp> {
                 onDownloaded: onDownloaded,
               );
             },
-            playerBuilder: (request, dnsMap, onResolutionChanged) =>
-                MrpPlayerPage(
+            playerBuilder:
+                (
+                  request,
+                  dnsMap,
+                  initialKeypadMode,
+                  onResolutionChanged,
+                  onKeypadModeChanged,
+                ) => MrpPlayerPage(
                   mrpPath: request.path,
                   dnsMap: dnsMap,
                   screenWidth: request.screenWidth ?? 240,
                   screenHeight: request.screenHeight ?? 320,
+                  initialKeypadMode: initialKeypadMode,
                   onResolutionChanged: onResolutionChanged,
+                  onKeypadModeChanged: onKeypadModeChanged,
                 ),
           ),
         );

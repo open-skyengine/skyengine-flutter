@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skyengine/models/keypad_mode.dart';
 import 'package:skyengine/services/local_mrp_database.dart';
 import 'package:skyengine/services/local_mrp_files.dart';
 import 'package:skyengine/services/theme_settings.dart';
@@ -173,6 +174,7 @@ void main() {
           '${tempDir.path}${Platform.pathSeparator}$localMrpDatabaseFileName',
     );
     late File mrp;
+    late File newerMrp;
     await tester.runAsync(() async {
       final mrpDir = mrpDirectoryForWorkDir(tempDir);
       await mrpDir.create(recursive: true);
@@ -184,10 +186,22 @@ void main() {
         path: mrp.path,
         hash: await LocalMrpFiles().calculateHash(mrp.path),
         resolution: '320x480',
+        addedAt: DateTime(2026, 7, 31, 18, 5),
+        keypadMode: KeypadMode.numeric,
+      );
+      newerMrp = await File(
+        '${mrpDir.path}${Platform.pathSeparator}newer.mrp',
+      ).writeAsString('NEWER-MRP');
+      await database.upsert(
+        path: newerMrp.path,
+        hash: await LocalMrpFiles().calculateHash(newerMrp.path),
+        addedAt: DateTime(2026, 7, 31, 19, 5),
       );
     });
     MrpOpenRequest? openedRequest;
+    KeypadMode? openedKeypadMode;
     ValueChanged<String>? updateResolution;
+    ValueChanged<KeypadMode>? updateKeypadMode;
 
     try {
       await tester.pumpWidget(
@@ -196,11 +210,20 @@ void main() {
             workingDirectoryProvider: () async => tempDir,
             pickMrpFile: () async => null,
             appStoreBuilder: _buildTestAppStore,
-            playerBuilder: (request, dnsMap, onResolutionChanged) {
-              openedRequest = request;
-              updateResolution = onResolutionChanged;
-              return const Scaffold(body: Text('播放器'));
-            },
+            playerBuilder:
+                (
+                  request,
+                  dnsMap,
+                  initialKeypadMode,
+                  onResolutionChanged,
+                  onKeypadModeChanged,
+                ) {
+                  openedRequest = request;
+                  openedKeypadMode = initialKeypadMode;
+                  updateResolution = onResolutionChanged;
+                  updateKeypadMode = onKeypadModeChanged;
+                  return const Scaffold(body: Text('播放器'));
+                },
             initialMrpProvider: () async => null,
             openMrpStreamProvider: () => const Stream<MrpOpenRequest>.empty(),
             localMrpDatabase: database,
@@ -220,6 +243,13 @@ void main() {
         await tester.pump();
       }
 
+      expect(find.text('加入时间 2026-07-31 18:05'), findsOneWidget);
+      expect(find.text('加入时间 2026-07-31 19:05'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('newer')).dy,
+        lessThan(tester.getTopLeft(find.text('demo')).dy),
+      );
+
       await tester.tap(find.text('demo'));
       await tester.pump();
       for (var attempt = 0; attempt < 20 && openedRequest == null; attempt++) {
@@ -229,9 +259,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(openedRequest?.resolution, '320x480');
+      expect(openedKeypadMode, KeypadMode.numeric);
 
       expect(updateResolution, isNotNull);
+      expect(updateKeypadMode, isNotNull);
       updateResolution!('176x220');
+      updateKeypadMode!(KeypadMode.joystick);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
@@ -239,6 +272,7 @@ void main() {
         () => database.recordForPath(mrp.path),
       );
       expect(record?.resolution, '176x220');
+      expect(record?.keypadMode, KeypadMode.joystick);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
@@ -260,7 +294,9 @@ Widget _buildTestAppStore(
 Widget _buildTestPlayer(
   MrpOpenRequest request,
   String? dnsMap,
+  KeypadMode initialKeypadMode,
   ValueChanged<String> onResolutionChanged,
+  ValueChanged<KeypadMode> onKeypadModeChanged,
 ) {
   return Scaffold(body: Text(request.path));
 }

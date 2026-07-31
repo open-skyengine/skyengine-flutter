@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/keypad_mode.dart';
 import '../services/emulator_settings.dart';
 import '../services/emulator_runtime_config.dart';
 import '../services/local_mrp_files.dart';
@@ -57,18 +58,6 @@ String mrpPlayerTitleForPath(String mrpPath, {String? title}) {
   return fileNameWithoutExtension(localFiles.fileName(mrpPath));
 }
 
-enum _KeypadMode { directional, joystick, numeric, full, none }
-
-extension on _KeypadMode {
-  String get label => switch (this) {
-    _KeypadMode.directional => '方向键',
-    _KeypadMode.joystick => '摇杆',
-    _KeypadMode.numeric => '9键',
-    _KeypadMode.full => '全键',
-    _KeypadMode.none => '无键盘',
-  };
-}
-
 extension on SkyEngineImageProcessingMode {
   String get label => switch (this) {
     SkyEngineImageProcessingMode.native => 'Native',
@@ -82,7 +71,9 @@ class MrpPlayerPage extends StatefulWidget {
   final String? dnsMap;
   final int screenWidth;
   final int screenHeight;
+  final KeypadMode initialKeypadMode;
   final ValueChanged<String>? onResolutionChanged;
+  final ValueChanged<KeypadMode>? onKeypadModeChanged;
   final EmulatorRuntimeConfigProvider runtimeConfigProvider;
 
   const MrpPlayerPage({
@@ -92,7 +83,9 @@ class MrpPlayerPage extends StatefulWidget {
     this.dnsMap,
     this.screenWidth = 240,
     this.screenHeight = 320,
+    this.initialKeypadMode = defaultKeypadMode,
     this.onResolutionChanged,
+    this.onKeypadModeChanged,
     this.runtimeConfigProvider = const BuiltInEmulatorRuntimeConfigProvider(),
   });
 
@@ -189,7 +182,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         cancel: AndroidVibration.cancel,
       );
   final Map<PhysicalKeyboardKey, int> _pressedKeyboardKeys = {};
-  _KeypadMode _keypadMode = _KeypadMode.directional;
+  late KeypadMode _keypadMode;
   String? _error;
   bool _exiting = false;
   bool _disposedEngine = false;
@@ -203,11 +196,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
 
   double get _keypadReservedHeight {
     return switch (_keypadMode) {
-      _KeypadMode.directional => _keypadButtonHeight * 3 + _keypadRowGap * 2,
-      _KeypadMode.joystick => _joystickSize,
-      _KeypadMode.numeric => _keypadButtonHeight * 4 + _keypadRowGap * 3,
-      _KeypadMode.full => _keypadButtonHeight * 4 + _keypadRowGap * 3,
-      _KeypadMode.none => 0,
+      KeypadMode.directional => _keypadButtonHeight * 3 + _keypadRowGap * 2,
+      KeypadMode.joystick => _joystickSize,
+      KeypadMode.numeric => _keypadButtonHeight * 4 + _keypadRowGap * 3,
+      KeypadMode.full => _keypadButtonHeight * 4 + _keypadRowGap * 3,
+      KeypadMode.none => 0,
     };
   }
 
@@ -215,6 +208,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _keypadMode = widget.initialKeypadMode;
     _hardwareKeysChannel.setMethodCallHandler(_handleHardwareKeyCall);
     unawaited(_setHardwareKeyCapture(true));
     _currentResolution = MrpResolution(widget.screenWidth, widget.screenHeight);
@@ -763,13 +757,13 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
   }
 
   Future<void> _showKeyboardDialog() async {
-    final selected = await showDialog<_KeypadMode>(
+    final selected = await showDialog<KeypadMode>(
       context: context,
       builder: (ctx) {
         return SimpleDialog(
           title: const Text('切换键盘'),
           children: [
-            for (final mode in _KeypadMode.values)
+            for (final mode in KeypadMode.values)
               SimpleDialogOption(
                 onPressed: () => Navigator.of(ctx).pop(mode),
                 child: Row(
@@ -794,6 +788,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       return;
     }
     setState(() => _keypadMode = selected);
+    widget.onKeypadModeChanged?.call(selected);
     _keyboardFocusNode.requestFocus();
   }
 
@@ -1062,7 +1057,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         child: Row(
           children: [
             Icon(
-              _keypadMode == _KeypadMode.none
+              _keypadMode == KeypadMode.none
                   ? Icons.keyboard_hide
                   : Icons.keyboard,
             ),
@@ -1128,7 +1123,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
           final hasVirtualKeypad =
-              !_isFullscreen && _keypadMode != _KeypadMode.none;
+              !_isFullscreen && _keypadMode != KeypadMode.none;
           final usesLandscapeKeypad =
               hasVirtualKeypad && engine.screenWidth > engine.screenHeight;
           if (usesLandscapeKeypad) {
@@ -1233,22 +1228,22 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
     final twoColumnButtonWidth = (sideWidth - _landscapeKeypadColumnGap) / 2;
     return switch (_keypadMode) {
-      _KeypadMode.directional => _buildDirectionalPad(
+      KeypadMode.directional => _buildDirectionalPad(
         buttonWidth: threeColumnButtonWidth,
         columnGap: _landscapeKeypadColumnGap,
       ),
-      _KeypadMode.joystick => _buildJoystick(),
-      _KeypadMode.numeric => _buildNumericKeypadHalf(const [
+      KeypadMode.joystick => _buildJoystick(),
+      KeypadMode.numeric => _buildNumericKeypadHalf(const [
         [('1', SkyEngineKey.key1), ('2', SkyEngineKey.key2)],
         [('4', SkyEngineKey.key4), ('5', SkyEngineKey.key5)],
         [('7', SkyEngineKey.key7), ('8', SkyEngineKey.key8)],
         [('*', SkyEngineKey.star), ('0', SkyEngineKey.key0)],
       ], buttonWidth: twoColumnButtonWidth),
-      _KeypadMode.full => _buildDirectionalKeypad(
+      KeypadMode.full => _buildDirectionalKeypad(
         buttonWidth: threeColumnButtonWidth,
         columnGap: _landscapeKeypadColumnGap,
       ),
-      _KeypadMode.none => const SizedBox.shrink(),
+      KeypadMode.none => const SizedBox.shrink(),
     };
   }
 
@@ -1256,19 +1251,19 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     final threeColumnButtonWidth =
         (sideWidth - _landscapeKeypadColumnGap * 2) / 3;
     return switch (_keypadMode) {
-      _KeypadMode.directional => _buildSoftKeypad(),
-      _KeypadMode.joystick => _buildJoystickConfirmKey(),
-      _KeypadMode.numeric => _buildNumericKeypadHalf(const [
+      KeypadMode.directional => _buildSoftKeypad(),
+      KeypadMode.joystick => _buildJoystickConfirmKey(),
+      KeypadMode.numeric => _buildNumericKeypadHalf(const [
         [('3', SkyEngineKey.key3)],
         [('6', SkyEngineKey.key6)],
         [('9', SkyEngineKey.key9)],
         [('#', SkyEngineKey.pound)],
       ], buttonWidth: threeColumnButtonWidth),
-      _KeypadMode.full => _buildNumericKeypad(
+      KeypadMode.full => _buildNumericKeypad(
         buttonWidth: threeColumnButtonWidth,
         columnGap: _landscapeKeypadColumnGap,
       ),
-      _KeypadMode.none => const SizedBox.shrink(),
+      KeypadMode.none => const SizedBox.shrink(),
     };
   }
 
@@ -1359,11 +1354,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
 
   Widget _buildKeypad() {
     return switch (_keypadMode) {
-      _KeypadMode.directional => _buildDirectionalKeypad(),
-      _KeypadMode.joystick => _buildJoystickKeypad(),
-      _KeypadMode.numeric => _buildNumericKeypad(),
-      _KeypadMode.full => _buildFullKeypad(),
-      _KeypadMode.none => const SizedBox.shrink(),
+      KeypadMode.directional => _buildDirectionalKeypad(),
+      KeypadMode.joystick => _buildJoystickKeypad(),
+      KeypadMode.numeric => _buildNumericKeypad(),
+      KeypadMode.full => _buildFullKeypad(),
+      KeypadMode.none => const SizedBox.shrink(),
     };
   }
 
