@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:charset/charset.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skyengine/models/keypad_mode.dart';
 import 'package:skyengine/models/mrp_resolution.dart';
 import 'package:skyengine/pages/mrp_player_page.dart';
 
@@ -56,8 +57,15 @@ void main() {
   });
 
   testWidgets('keyboard dialog includes all keypad modes', (tester) async {
+    final selectedModes = <KeypadMode>[];
     await tester.pumpWidget(
-      const MaterialApp(home: MrpPlayerPage(mrpPath: 'missing.mrp')),
+      MaterialApp(
+        home: MrpPlayerPage(
+          mrpPath: 'missing.mrp',
+          initialKeypadMode: KeypadMode.numeric,
+          onKeypadModeChanged: selectedModes.add,
+        ),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -74,6 +82,18 @@ void main() {
     expect(find.text('9键'), findsOneWidget);
     expect(find.text('全键'), findsOneWidget);
     expect(find.text('无键盘'), findsOneWidget);
+    final numericOption = find.ancestor(
+      of: find.text('9键'),
+      matching: find.byType(SimpleDialogOption),
+    );
+    expect(
+      find.descendant(of: numericOption, matching: find.byIcon(Icons.check)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('摇杆'));
+    await tester.pump();
+    expect(selectedModes, [KeypadMode.joystick]);
   });
 
   testWidgets('switching resolution reports the selected resolution', (

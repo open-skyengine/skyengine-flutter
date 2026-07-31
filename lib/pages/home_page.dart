@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/keypad_mode.dart';
 import '../models/mrp_resolution.dart';
 import '../platform/android_app_update.dart';
 import '../platform/android_mythroad_assets.dart';
@@ -38,7 +39,9 @@ typedef MrpPlayerBuilder =
     Widget Function(
       MrpOpenRequest request,
       String? dnsMap,
+      KeypadMode initialKeypadMode,
       ValueChanged<String> onResolutionChanged,
+      ValueChanged<KeypadMode> onKeypadModeChanged,
     );
 
 Directory mrpDirectoryForWorkDir(Directory workDir) {
@@ -87,6 +90,13 @@ enum _MrpRemovalAction { removeFromList, deleteFile }
 
 enum _LocalMrpMenuAction { details }
 
+class _LocalMrpListEntry {
+  final LocalMrpFile file;
+  final DateTime addedAt;
+
+  const _LocalMrpListEntry({required this.file, required this.addedAt});
+}
+
 class _HomePageState extends State<HomePage> {
   final LocalMrpFiles _localFiles = LocalMrpFiles();
   late final LocalMrpDatabase _mrpDatabase;
@@ -97,7 +107,7 @@ class _HomePageState extends State<HomePage> {
   );
   final AndroidAppUpdate _androidAppUpdate = const AndroidAppUpdate();
   late final EmulatorUpdateChecker _emulatorUpdateChecker;
-  List<LocalMrpFile> _mrpFiles = [];
+  List<_LocalMrpListEntry> _mrpFiles = [];
   String? _mrpDir;
   Directory? _workDir;
   String? _dnsMap;
@@ -140,12 +150,14 @@ class _HomePageState extends State<HomePage> {
     await _mrpDatabase.open(
       initialRecordsProvider: () async {
         final initialRecords = <LocalMrpRecord>[];
+        final addedAt = DateTime.now();
         for (final file in _localFiles.scan(mrpDir.path)) {
           try {
             initialRecords.add(
               LocalMrpRecord(
                 path: file.path,
                 hash: await _localFiles.calculateHash(file.path),
+                addedAt: addedAt,
               ),
             );
           } catch (error, stackTrace) {
@@ -181,7 +193,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _refreshFileList() async {
     if (_mrpDir == null) return;
     final records = await _mrpDatabase.records();
-    final files = _localFiles.readFiles(records.map((record) => record.path));
+    final files = <_LocalMrpListEntry>[];
+    for (final record in records) {
+      final file = _localFiles.readFile(record.path);
+      if (file != null) {
+        files.add(_LocalMrpListEntry(file: file, addedAt: record.addedAt));
+      }
+    }
     if (!mounted) {
       return;
     }
@@ -238,6 +256,7 @@ class _HomePageState extends State<HomePage> {
     final requestedResolution = MrpResolution.tryParse(request.resolution);
     final savedResolution = MrpResolution.tryParse(record?.resolution);
     final resolution = requestedResolution ?? savedResolution;
+    final keypadMode = record?.keypadMode ?? defaultKeypadMode;
     if (resolution != null) {
       await _mrpDatabase.updateResolution(request.path, resolution.label);
     }
@@ -250,11 +269,17 @@ class _HomePageState extends State<HomePage> {
     );
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => widget.playerBuilder(effectiveRequest, _dnsMap, (
-          resolution,
-        ) {
-          unawaited(_mrpDatabase.updateResolution(request.path, resolution));
-        }),
+        builder: (_) => widget.playerBuilder(
+          effectiveRequest,
+          _dnsMap,
+          keypadMode,
+          (resolution) {
+            unawaited(_mrpDatabase.updateResolution(request.path, resolution));
+          },
+          (keypadMode) {
+            unawaited(_mrpDatabase.updateKeypadMode(request.path, keypadMode));
+          },
+        ),
       ),
     );
   }
@@ -660,7 +685,7 @@ class _HomePageState extends State<HomePage> {
     }
     setState(() {
       _mrpFiles = _mrpFiles
-          .where((file) => _localFiles.fileListKey(file.path) != key)
+          .where((entry) => _localFiles.fileListKey(entry.file.path) != key)
           .toList();
     });
   }
@@ -693,7 +718,7 @@ class _HomePageState extends State<HomePage> {
   String _fileName(String path) => _localFiles.fileName(path);
 
   Future<void> _showLocalMrpMenu(
-    LocalMrpFile file,
+    _LocalMrpListEntry entry,
     Offset globalPosition,
   ) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -721,11 +746,12 @@ class _HomePageState extends State<HomePage> {
 
     switch (action) {
       case _LocalMrpMenuAction.details:
-        await _showMrpDetails(file);
+        await _showMrpDetails(entry);
     }
   }
 
-  Future<void> _showMrpDetails(LocalMrpFile file) async {
+  Future<void> _showMrpDetails(_LocalMrpListEntry entry) async {
+    final file = entry.file;
     final metadata = file.metadata;
     await showDialog<void>(
       context: context,
@@ -739,6 +765,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 _detailRow('文件名', file.fileName),
                 _detailRow('路径', file.path),
+                _detailRow('加入时间', _formatAddedAt(entry.addedAt)),
                 _detailRow('厂商', _emptyAsDash(metadata.vendor)),
                 _detailRow('版本号', metadata.version?.toString() ?? '-'),
                 _detailRow('包内文件名', _emptyAsDash(metadata.fileHeaderName)),
@@ -780,6 +807,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _emptyAsDash(String value) => value.isEmpty ? '-' : value;
+
+  String _formatAddedAt(DateTime value) {
+    final local = value.toLocal();
+    String twoDigits(int part) => part.toString().padLeft(2, '0');
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${twoDigits(local.month)}-${twoDigits(local.day)} '
+        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -857,26 +892,38 @@ class _HomePageState extends State<HomePage> {
     return ListView.builder(
       itemCount: _mrpFiles.length,
       itemBuilder: (context, index) {
-        final file = _mrpFiles[index];
+        final entry = _mrpFiles[index];
+        final file = entry.file;
         Offset? longPressPosition;
         return GestureDetector(
           onLongPressStart: (details) {
             longPressPosition = details.globalPosition;
           },
           onLongPress: () {
-            _showLocalMrpMenu(file, longPressPosition ?? Offset.zero);
+            _showLocalMrpMenu(entry, longPressPosition ?? Offset.zero);
           },
           child: ListTile(
+            isThreeLine: true,
             leading: const Icon(Icons.videogame_asset),
             title: Text(
               file.displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: Text(
-              file.vendorAndVersion,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  file.vendorAndVersion,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '加入时间 ${_formatAddedAt(entry.addedAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
             trailing: IconButton(
               tooltip: '删除',
