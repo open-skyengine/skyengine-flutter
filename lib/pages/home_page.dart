@@ -113,6 +113,7 @@ class _HomePageState extends State<HomePage> {
   String? _dnsMap;
   int _selectedIndex = 0;
   bool _checkingUpdate = false;
+  final ValueNotifier<bool> _checkingUpdateNotifier = ValueNotifier(false);
   bool _downloadingUpdate = false;
   bool _updatePromptShown = false;
   bool _openedInitialMrp = false;
@@ -326,6 +327,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     setState(() => _checkingUpdate = true);
+    _checkingUpdateNotifier.value = true;
     try {
       final result = await _emulatorUpdateChecker.check(
         workingDirectory: _workDir,
@@ -357,6 +359,7 @@ class _HomePageState extends State<HomePage> {
     } finally {
       if (mounted) {
         setState(() => _checkingUpdate = false);
+        _checkingUpdateNotifier.value = false;
       } else {
         _checkingUpdate = false;
       }
@@ -601,6 +604,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _themeSettings.removeListener(_onThemeSettingsChanged);
+    _checkingUpdateNotifier.dispose();
     _mrpOpenSubscription?.cancel();
     _appStoreClient.close();
     if (_ownsMrpDatabase) {
@@ -863,6 +867,7 @@ class _HomePageState extends State<HomePage> {
           MorePage(
             themeSettings: _themeSettings,
             checkingForUpdate: _checkingUpdate,
+            checkingForUpdateListenable: _checkingUpdateNotifier,
             onCheckForUpdate: () => _checkAppUpdate(showResult: true),
           ),
         ],

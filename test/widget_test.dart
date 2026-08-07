@@ -69,7 +69,8 @@ void main() {
       expect(find.byTooltip('切换到深色模式'), findsOneWidget);
       expect(find.text('深色设置'), findsOneWidget);
       expect(find.text('模拟器设置'), findsOneWidget);
-      expect(find.text('调试'), findsOneWidget);
+      expect(find.text('关于'), findsOneWidget);
+      expect(find.text('调试'), findsNothing);
 
       await tester.tap(find.byTooltip('切换到深色模式'));
       await tester.pump();
