@@ -181,6 +181,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
             _detailRow('发布时间', _formatDateTime(app.createdAt!)),
           if (app.description.trim().isNotEmpty)
             _detailRow('应用介绍', app.description.trim()),
+          const SizedBox(height: 20),
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
