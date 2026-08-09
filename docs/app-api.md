@@ -142,6 +142,8 @@ function sign({ method, path, query = '', timestamp, nonce, body = '', secret })
 | `page` | int | 否 | 页码，默认 `1` |
 | `page_size` | int | 否 | 每页数量，默认 `20`，最大 `100` |
 | `resolution` | string | 否 | 屏幕分辨率，例如 `240x320` |
+| `type` | string | 否 | 应用类型：`game` 或 `software`；`default` 表示不限 |
+| `order` | string | 否 | 排序方式：`default`、`latest` 或 `download` |
 
 ## 4. 接口列表
 
@@ -163,6 +165,10 @@ GET /api/app/v1/apps
 | `type` | string | 否 | 只返回 `game` 或 `software` 类型的应用 |
 | `sort_by` | string | 否 | 排序字段：`name` 或 `created_at`，默认 `created_at` |
 | `sort_order` | string | 否 | 排序方向：`asc` 或 `desc`，默认 `desc` |
+
+新客户端可先读取搜索配置接口，再只展示服务端开放的选项。旧的
+`sort_by`/`sort_order` 参数仍可用；`order=default` 与默认排序相同，
+`order=latest` 按上传时间倒序，`order=download` 按 APP API 下载次数倒序。
 
 按名称升序获取应用：
 
@@ -429,6 +435,43 @@ GET /api/app/v1/config
 | `hosts` | 域名映射数组 |
 | `hosts[].domain` | 域名 |
 | `hosts[].ip` | IP，或 `IP:端口`；IPv6 带端口时使用 `[IPv6]:端口` |
+
+### 4.8 获取搜索配置
+
+```http
+GET /api/app/v1/search-config
+```
+
+返回模拟器搜索页可使用的筛选和排序选项。管理端关闭的选项不会出现在
+响应中；选项名称和值由服务端定义，数组顺序就是客户端展示顺序。
+
+响应示例：
+
+```json
+[
+  {
+    "name": "排序方式",
+    "query_key": "order",
+    "options": [
+      {"name": "默认排序", "value": "default"},
+      {"name": "新上传", "value": "latest"},
+      {"name": "下载多", "value": "download"}
+    ]
+  },
+  {
+    "name": "应用类型",
+    "query_key": "type",
+    "options": [
+      {"name": "不限", "value": "default"},
+      {"name": "软件", "value": "software"},
+      {"name": "游戏", "value": "game"}
+    ]
+  }
+]
+```
+
+分辨率选项会根据后台分辨率管理中的配置动态生成，并始终包含服务端的
+`default`（不限）选项，除非该选项被管理端关闭。
 
 ## 5. 状态码
 

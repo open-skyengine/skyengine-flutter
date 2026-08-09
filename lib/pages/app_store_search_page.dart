@@ -2,35 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/mrp_resolution.dart';
 import '../services/app_store_api.dart';
 import '../services/search_history.dart';
 import '../widgets/app_store_app_tile.dart';
 import 'app_store_app_details_page.dart';
-
-enum _SearchType {
-  all('全部', null),
-  software('软件', 'software'),
-  game('游戏', 'game');
-
-  const _SearchType(this.label, this.apiValue);
-
-  final String label;
-  final String? apiValue;
-}
-
-enum _SearchSort {
-  newest('发布时间：从新到旧', 'created_at', 'desc'),
-  oldest('发布时间：从旧到新', 'created_at', 'asc'),
-  nameAscending('名称：A-Z', 'name', 'asc'),
-  nameDescending('名称：Z-A', 'name', 'desc');
-
-  const _SearchSort(this.label, this.sortBy, this.sortOrder);
-
-  final String label;
-  final String sortBy;
-  final String sortOrder;
-}
 
 class AppStoreSearchPage extends StatefulWidget {
   const AppStoreSearchPage({
@@ -59,16 +34,17 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
   final ScrollController _scrollController = ScrollController();
   List<String> _history = const [];
   final List<AppStoreApp> _apps = [];
+  late final Future<void> _searchConfigFuture;
+  List<AppStoreSearchConfigGroup> _filterGroups = const [];
+  final Map<String, String> _selectedFilterValues = {};
 
-  _SearchType _type = _SearchType.all;
-  _SearchSort _sort = _SearchSort.newest;
-  String _resolution = '';
   String _submittedQuery = '';
   String? _error;
   bool _loadingHistory = true;
   bool _loadingFirstPage = false;
   bool _loadingMore = false;
   bool _hasMore = false;
+  bool _filtersExpanded = false;
   int _nextPage = 1;
   int _requestGeneration = 0;
 
@@ -76,6 +52,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _searchConfigFuture = _loadSearchConfig();
     unawaited(_loadHistory());
   }
 
@@ -102,6 +79,83 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
     }
   }
 
+  Future<void> _loadSearchConfig() async {
+    try {
+      final groups = _usableSearchConfig(
+        await widget.client.fetchSearchConfig().timeout(
+          const Duration(seconds: 5),
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _filterGroups = groups;
+        _setDefaultFilterValues(groups);
+      });
+      if (_submittedQuery.isNotEmpty) {
+        unawaited(_reloadResults());
+      }
+    } catch (_) {
+      // Search remains usable without optional server-side filters.
+    }
+  }
+
+  List<AppStoreSearchConfigGroup> _usableSearchConfig(
+    List<AppStoreSearchConfigGroup> groups,
+  ) {
+    final seenKeys = <String>{};
+    final result = <AppStoreSearchConfigGroup>[];
+    for (final group in groups) {
+      if (group.name.trim().isEmpty ||
+          group.queryKey.trim().isEmpty ||
+          seenKeys.contains(group.queryKey)) {
+        continue;
+      }
+      final seenValues = <String>{};
+      final options = [
+        for (final option in group.options)
+          if (option.name.trim().isNotEmpty &&
+              option.value.trim().isNotEmpty &&
+              seenValues.add(option.value))
+            option,
+      ];
+      if (options.isNotEmpty) {
+        seenKeys.add(group.queryKey);
+        result.add(
+          AppStoreSearchConfigGroup(
+            name: group.name,
+            queryKey: group.queryKey,
+            options: options,
+          ),
+        );
+      }
+    }
+    return result;
+  }
+
+  void _setDefaultFilterValues(List<AppStoreSearchConfigGroup> groups) {
+    final validKeys = <String>{};
+    for (final group in groups) {
+      validKeys.add(group.queryKey);
+      final selected = _selectedFilterValues[group.queryKey];
+      if (selected != null &&
+          group.options.any((option) => option.value == selected)) {
+        continue;
+      }
+      AppStoreSearchConfigOption? defaultOption;
+      for (final option in group.options) {
+        if (option.value == 'default') {
+          defaultOption = option;
+          break;
+        }
+      }
+      _selectedFilterValues[group.queryKey] =
+          (defaultOption ?? group.options.first).value;
+    }
+    _selectedFilterValues.removeWhere((key, _) => !validKeys.contains(key));
+  }
+
   Future<void> _clearHistory() async {
     try {
       await widget.searchHistory.clear();
@@ -116,6 +170,10 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
   Future<void> _submitSearch([String? term]) async {
     final query = (term ?? _searchController.text).trim();
     if (query.isEmpty) {
+      return;
+    }
+    await _searchConfigFuture;
+    if (!mounted) {
       return;
     }
     _searchController.value = TextEditingValue(
@@ -205,14 +263,11 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
   }
 
   Future<PagedResult<AppStoreApp>> _fetchPage(int page) {
-    return widget.client.searchApps(
+    return widget.client.searchAppsWithFilters(
       query: _submittedQuery,
       page: page,
       pageSize: _pageSize,
-      type: _type.apiValue,
-      resolution: _resolution.isEmpty ? null : _resolution,
-      sortBy: _sort.sortBy,
-      sortOrder: _sort.sortOrder,
+      filters: _selectedFilterValues,
     );
   }
 
@@ -223,8 +278,8 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
     }
   }
 
-  void _updateFilters(VoidCallback update) {
-    setState(update);
+  void _updateFilter(AppStoreSearchConfigGroup group, String value) {
+    setState(() => _selectedFilterValues[group.queryKey] = value);
     if (_submittedQuery.isNotEmpty) {
       unawaited(_reloadResults());
     }
@@ -239,10 +294,15 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
           mrpDir: widget.mrpDir,
           onRunMrp: widget.onRunMrp,
           onDownloaded: widget.onDownloaded,
-          initialResolution: _resolution.isEmpty ? null : _resolution,
+          initialResolution: _selectedResolution,
         ),
       ),
     );
+  }
+
+  String? get _selectedResolution {
+    final value = _selectedFilterValues['resolution'];
+    return value == null || value == 'default' ? null : value;
   }
 
   @override
@@ -281,6 +341,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
                         _apps.clear();
                         _error = null;
                         _loadingFirstPage = false;
+                        _filtersExpanded = false;
                       });
                     }
                   },
@@ -299,98 +360,129 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
       ),
       body: Column(
         children: [
-          if (_submittedQuery.isNotEmpty) ...[
-            _buildFilters(),
-            const Divider(height: 1),
-          ],
-          Expanded(child: _buildBody()),
+          if (_submittedQuery.isNotEmpty) _buildFilterBar(),
+          if (_submittedQuery.isNotEmpty) const Divider(height: 1),
+          Expanded(
+            child: _submittedQuery.isNotEmpty
+                ? _buildResultsArea()
+                : _buildBody(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultsArea() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildBody(),
+        if (_filtersExpanded) ...[
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _filtersExpanded = false),
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Material(
+              key: const ValueKey('search-filters-panel'),
+              color: Theme.of(context).colorScheme.surface,
+              elevation: 4,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+                ),
+                child: SingleChildScrollView(child: _buildFilters()),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFilterBar() {
+    final canExpand = _filterGroups.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('搜索结果', style: Theme.of(context).textTheme.titleSmall),
+          ),
+          IconButton(
+            key: const ValueKey('toggle-search-filters'),
+            tooltip: _filtersExpanded ? '收起筛选' : '展开筛选',
+            onPressed: canExpand
+                ? () => setState(() => _filtersExpanded = !_filtersExpanded)
+                : null,
+            icon: Icon(
+              _filtersExpanded ? Icons.filter_alt : Icons.filter_alt_outlined,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildFilters() {
+    if (_filterGroups.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final type in _SearchType.values) ...[
-                  ChoiceChip(
-                    label: Text(type.label),
-                    selected: _type == type,
-                    onSelected: (_) => _updateFilters(() => _type = type),
-                  ),
-                  if (type != _SearchType.values.last) const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  key: const ValueKey('search-resolution-filter'),
-                  initialValue: _resolution,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: '分辨率',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('全部')),
-                    for (final resolution in kCommonMrpResolutions)
-                      DropdownMenuItem(
-                        value: resolution.label,
-                        child: Text(resolution.label),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      _updateFilters(() => _resolution = value);
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonFormField<_SearchSort>(
-                  key: const ValueKey('search-sort-filter'),
-                  initialValue: _sort,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: '排序',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  items: [
-                    for (final sort in _SearchSort.values)
-                      DropdownMenuItem(value: sort, child: Text(sort.label)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      _updateFilters(() => _sort = value);
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
+          for (var index = 0; index < _filterGroups.length; index++) ...[
+            _buildFilterGroup(_filterGroups[index]),
+            if (index != _filterGroups.length - 1) const SizedBox(height: 10),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _buildFilterGroup(AppStoreSearchConfigGroup group) {
+    final key = _filterKey(group);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(group.name),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var index = 0; index < group.options.length; index++) ...[
+                ChoiceChip(
+                  key: index == 0 ? ValueKey(key) : null,
+                  label: Text(
+                    group.options[index].name,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  selected:
+                      _selectedFilterValues[group.queryKey] ==
+                      group.options[index].value,
+                  onSelected: (_) =>
+                      _updateFilter(group, group.options[index].value),
+                ),
+                if (index != group.options.length - 1) const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _filterKey(AppStoreSearchConfigGroup group) {
+    return 'search-${group.queryKey}-filter';
   }
 
   Widget _buildBody() {
