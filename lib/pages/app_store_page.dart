@@ -19,6 +19,26 @@ enum _StoreSection {
   final String? apiType;
 }
 
+class _StoreTabCache {
+  _StoreTabCache(this.section);
+
+  final _StoreSection section;
+  final ScrollController scrollController = ScrollController();
+  final List<AppStoreApp> apps = [];
+
+  bool hasLoaded = false;
+  bool loadingFirstPage = false;
+  bool loadingMore = false;
+  bool hasMore = true;
+  int nextPage = 1;
+  int requestGeneration = 0;
+  String? error;
+
+  void dispose() {
+    scrollController.dispose();
+  }
+}
+
 class AppStorePage extends StatefulWidget {
   const AppStorePage({
     super.key,
@@ -48,16 +68,10 @@ class _AppStorePageState extends State<AppStorePage>
   late final bool _ownsClient;
   late final bool _ownsSearchHistory;
   late final TabController _tabController;
-  final ScrollController _scrollController = ScrollController();
-  final List<AppStoreApp> _apps = [];
+  late final PageController _pageController;
+  late final List<_StoreTabCache> _tabCaches;
 
-  _StoreSection _section = _StoreSection.latest;
-  bool _loadingFirstPage = false;
-  bool _loadingMore = false;
-  bool _hasMore = true;
-  int _nextPage = 1;
-  int _requestGeneration = 0;
-  String? _error;
+  int _activeTabIndex = 0;
 
   @override
   void initState() {
@@ -70,13 +84,22 @@ class _AppStorePageState extends State<AppStorePage>
       length: _StoreSection.values.length,
       vsync: this,
     );
-    _scrollController.addListener(_onScroll);
-    unawaited(_reload());
+    _pageController = PageController();
+    _tabCaches = [
+      for (final section in _StoreSection.values) _StoreTabCache(section),
+    ];
+    for (var index = 0; index < _tabCaches.length; index++) {
+      _tabCaches[index].scrollController.addListener(() => _onScroll(index));
+    }
+    unawaited(_reloadSection(0));
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _pageController.dispose();
+    for (final cache in _tabCaches) {
+      cache.dispose();
+    }
     _tabController.dispose();
     if (_ownsClient) {
       _client.close();
@@ -87,93 +110,125 @@ class _AppStorePageState extends State<AppStorePage>
     super.dispose();
   }
 
-  Future<void> _reload() async {
-    final generation = ++_requestGeneration;
+  Future<void> _reloadSection(int index) async {
+    final cache = _tabCaches[index];
+    final generation = ++cache.requestGeneration;
     setState(() {
-      _apps.clear();
-      _nextPage = 1;
-      _hasMore = true;
-      _error = null;
-      _loadingFirstPage = true;
+      cache.hasLoaded = true;
+      cache.apps.clear();
+      cache.nextPage = 1;
+      cache.hasMore = true;
+      cache.error = null;
+      cache.loadingFirstPage = true;
     });
     try {
-      final result = await _fetchPage(1);
-      if (!mounted || generation != _requestGeneration) {
+      final result = await _fetchPage(index, 1);
+      if (!mounted || generation != cache.requestGeneration) {
         return;
       }
       setState(() {
-        _apps.addAll(result.items);
-        _nextPage = 2;
-        _hasMore = result.hasMore;
+        cache.apps.addAll(result.items);
+        cache.nextPage = 2;
+        cache.hasMore = result.hasMore;
       });
     } catch (error) {
-      if (mounted && generation == _requestGeneration) {
+      if (mounted && generation == cache.requestGeneration) {
         setState(() {
-          _error = error.toString();
-          _hasMore = false;
+          cache.error = error.toString();
+          cache.hasMore = false;
         });
       }
     } finally {
-      if (mounted && generation == _requestGeneration) {
-        setState(() => _loadingFirstPage = false);
+      if (mounted && generation == cache.requestGeneration) {
+        setState(() => cache.loadingFirstPage = false);
       }
     }
   }
 
-  Future<void> _loadMore() async {
-    if (_loadingFirstPage || _loadingMore || !_hasMore) {
+  Future<void> _ensureLoaded(int index) async {
+    final cache = _tabCaches[index];
+    if (cache.hasLoaded || cache.loadingFirstPage) {
       return;
     }
-    final generation = _requestGeneration;
-    setState(() => _loadingMore = true);
+    await _reloadSection(index);
+  }
+
+  Future<void> _loadMore(int index) async {
+    final cache = _tabCaches[index];
+    if (cache.loadingFirstPage || cache.loadingMore || !cache.hasMore) {
+      return;
+    }
+    final generation = cache.requestGeneration;
+    setState(() => cache.loadingMore = true);
     try {
-      final result = await _fetchPage(_nextPage);
-      if (!mounted || generation != _requestGeneration) {
+      final result = await _fetchPage(index, cache.nextPage);
+      if (!mounted || generation != cache.requestGeneration) {
         return;
       }
       setState(() {
-        _apps.addAll(result.items);
-        _nextPage += 1;
-        _hasMore = result.hasMore;
+        cache.apps.addAll(result.items);
+        cache.nextPage += 1;
+        cache.hasMore = result.hasMore;
       });
     } catch (error) {
-      if (mounted && generation == _requestGeneration) {
+      if (mounted && generation == cache.requestGeneration) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('加载下一页失败：$error')));
       }
     } finally {
-      if (mounted && generation == _requestGeneration) {
-        setState(() => _loadingMore = false);
+      if (mounted && generation == cache.requestGeneration) {
+        setState(() => cache.loadingMore = false);
       }
     }
   }
 
-  Future<PagedResult<AppStoreApp>> _fetchPage(int page) {
+  Future<PagedResult<AppStoreApp>> _fetchPage(int index, int page) {
+    final section = _tabCaches[index].section;
     return _client.fetchApps(
       page: page,
       pageSize: _pageSize,
       resolution: null,
-      type: _section.apiType,
+      type: section.apiType,
       sortBy: 'created_at',
       sortOrder: 'desc',
     );
   }
 
-  void _onScroll() {
-    if (_scrollController.hasClients &&
-        _scrollController.position.extentAfter < 280) {
-      unawaited(_loadMore());
+  void _onScroll(int index) {
+    final controller = _tabCaches[index].scrollController;
+    if (controller.hasClients && controller.position.extentAfter < 280) {
+      unawaited(_loadMore(index));
     }
   }
 
   void _selectSection(int index) {
-    final section = _StoreSection.values[index];
-    if (section == _section) {
+    if (index < 0 || index >= _StoreSection.values.length) {
       return;
     }
-    setState(() => _section = section);
-    unawaited(_reload());
+    final currentPage = _pageController.hasClients
+        ? _pageController.page?.round()
+        : _activeTabIndex;
+    if (currentPage == index) {
+      return;
+    }
+    unawaited(
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
+  void _onPageChanged(int index) {
+    if (_activeTabIndex != index) {
+      setState(() => _activeTabIndex = index);
+    }
+    if (_tabController.index != index) {
+      _tabController.animateTo(index);
+    }
+    unawaited(_ensureLoaded(index));
   }
 
   Future<void> _openSearch() async {
@@ -242,17 +297,31 @@ class _AppStorePageState extends State<AppStorePage>
           ),
         ),
         Expanded(
-          child: RefreshIndicator(onRefresh: _reload, child: _buildBody()),
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _StoreSection.values.length,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (context, index) {
+              return RefreshIndicator(
+                onRefresh: () => _reloadSection(index),
+                child: _buildBody(index),
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildBody() {
-    if (_loadingFirstPage && _apps.isEmpty) {
+  Widget _buildBody(int index) {
+    final cache = _tabCaches[index];
+    if (!cache.hasLoaded) {
+      return const SizedBox.expand();
+    }
+    if (cache.loadingFirstPage && cache.apps.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _apps.isEmpty) {
+    if (cache.error != null && cache.apps.isEmpty) {
       return ListView(
         children: [
           const SizedBox(height: 120),
@@ -264,12 +333,15 @@ class _AppStorePageState extends State<AppStorePage>
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text('加载应用商店失败\n$_error', textAlign: TextAlign.center),
+            child: Text(
+              '加载应用商店失败\n${cache.error}',
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: 16),
           Center(
             child: FilledButton.icon(
-              onPressed: _reload,
+              onPressed: () => unawaited(_reloadSection(index)),
               icon: const Icon(Icons.refresh),
               label: const Text('重试'),
             ),
@@ -277,7 +349,7 @@ class _AppStorePageState extends State<AppStorePage>
         ],
       );
     }
-    if (_apps.isEmpty) {
+    if (cache.apps.isEmpty) {
       return ListView(
         children: const [
           SizedBox(height: 160),
@@ -288,15 +360,15 @@ class _AppStorePageState extends State<AppStorePage>
       );
     }
     return ListView.separated(
-      controller: _scrollController,
+      controller: cache.scrollController,
       padding: const EdgeInsets.only(top: 8, bottom: 16),
-      itemCount: _apps.length + 1,
+      itemCount: cache.apps.length + 1,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        if (index == _apps.length) {
-          return _buildFooter();
+        if (index == cache.apps.length) {
+          return _buildFooter(cache);
         }
-        final app = _apps[index];
+        final app = cache.apps[index];
         return AppStoreAppTile(
           app: app,
           client: _client,
@@ -306,14 +378,14 @@ class _AppStorePageState extends State<AppStorePage>
     );
   }
 
-  Widget _buildFooter() {
-    if (_loadingMore) {
+  Widget _buildFooter(_StoreTabCache cache) {
+    if (cache.loadingMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (!_hasMore) {
+    if (!cache.hasMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
         child: Center(child: Text('已经到底了')),
