@@ -167,6 +167,23 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
     }
   }
 
+  void _returnToHistory() {
+    if (_submittedQuery.isEmpty) {
+      return;
+    }
+    ++_requestGeneration;
+    setState(() {
+      _submittedQuery = '';
+      _apps.clear();
+      _error = null;
+      _loadingFirstPage = false;
+      _loadingMore = false;
+      _hasMore = false;
+      _nextPage = 1;
+      _filtersExpanded = false;
+    });
+  }
+
   Future<void> _submitSearch([String? term]) async {
     final query = (term ?? _searchController.text).trim();
     if (query.isEmpty) {
@@ -307,67 +324,79 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          key: const ValueKey('close-app-store-search'),
-          tooltip: '返回',
-          onPressed: () => unawaited(Navigator.of(context).maybePop()),
-          icon: const Icon(Icons.chevron_left, size: 32),
-        ),
-        titleSpacing: 0,
-        title: Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: SearchBar(
-                  key: const ValueKey('app-store-search-field'),
-                  controller: _searchController,
-                  autoFocus: true,
-                  constraints: const BoxConstraints.tightFor(
-                    height: kToolbarHeight * 0.7,
+    return PopScope(
+      canPop: _submittedQuery.isEmpty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _submittedQuery.isNotEmpty) {
+          _returnToHistory();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            key: const ValueKey('close-app-store-search'),
+            tooltip: _submittedQuery.isEmpty ? '返回' : '返回搜索历史',
+            onPressed: _submittedQuery.isEmpty
+                ? () => unawaited(Navigator.of(context).maybePop())
+                : _returnToHistory,
+            icon: const Icon(Icons.chevron_left, size: 32),
+          ),
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SearchBar(
+                    key: const ValueKey('app-store-search-field'),
+                    controller: _searchController,
+                    autoFocus: true,
+                    constraints: const BoxConstraints.tightFor(
+                      height: kToolbarHeight * 0.7,
+                    ),
+                    elevation: const WidgetStatePropertyAll(0),
+                    shadowColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
+                    ),
+                    textInputAction: TextInputAction.search,
+                    hintText: '搜索软件或游戏',
+                    leading: const Icon(Icons.search),
+                    onChanged: (value) {
+                      if (value.trim().isEmpty && _submittedQuery.isNotEmpty) {
+                        ++_requestGeneration;
+                        setState(() {
+                          _submittedQuery = '';
+                          _apps.clear();
+                          _error = null;
+                          _loadingFirstPage = false;
+                          _filtersExpanded = false;
+                        });
+                      }
+                    },
+                    onSubmitted: (_) => unawaited(_submitSearch()),
                   ),
-                  elevation: const WidgetStatePropertyAll(0),
-                  shadowColor: const WidgetStatePropertyAll(Colors.transparent),
-                  textInputAction: TextInputAction.search,
-                  hintText: '搜索软件或游戏',
-                  leading: const Icon(Icons.search),
-                  onChanged: (value) {
-                    if (value.trim().isEmpty && _submittedQuery.isNotEmpty) {
-                      ++_requestGeneration;
-                      setState(() {
-                        _submittedQuery = '';
-                        _apps.clear();
-                        _error = null;
-                        _loadingFirstPage = false;
-                        _filtersExpanded = false;
-                      });
-                    }
-                  },
-                  onSubmitted: (_) => unawaited(_submitSearch()),
                 ),
-              ),
-              const SizedBox(width: 4),
-              TextButton(
-                key: const ValueKey('submit-app-store-search'),
-                onPressed: () => unawaited(_submitSearch()),
-                child: const Text('搜索'),
-              ),
-            ],
+                const SizedBox(width: 4),
+                TextButton(
+                  key: const ValueKey('submit-app-store-search'),
+                  onPressed: () => unawaited(_submitSearch()),
+                  child: const Text('搜索'),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          if (_submittedQuery.isNotEmpty) _buildFilterBar(),
-          if (_submittedQuery.isNotEmpty) const Divider(height: 1),
-          Expanded(
-            child: _submittedQuery.isNotEmpty
-                ? _buildResultsArea()
-                : _buildBody(),
-          ),
-        ],
+        body: Column(
+          children: [
+            if (_submittedQuery.isNotEmpty) _buildFilterBar(),
+            if (_submittedQuery.isNotEmpty) const Divider(height: 1),
+            Expanded(
+              child: _submittedQuery.isNotEmpty
+                  ? _buildResultsArea()
+                  : _buildBody(),
+            ),
+          ],
+        ),
       ),
     );
   }

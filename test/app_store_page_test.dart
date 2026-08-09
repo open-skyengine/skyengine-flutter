@@ -178,6 +178,34 @@ void main() {
     expect(find.text('下载并运行'), findsOneWidget);
     expect(client.versionAppIds, contains(1001));
   });
+
+  testWidgets('search results back returns to search history', (tester) async {
+    final history = _FakeSearchHistory(['历史关键词']);
+    await tester.pumpWidget(
+      _testApp(client: _FakeAppStoreClient(), searchHistory: history),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('open-app-store-search')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('app-store-search-field')),
+      'demo',
+    );
+    await tester.tap(find.byKey(const ValueKey('submit-app-store-search')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Software Demo'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('close-app-store-search')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('搜索历史'), findsOneWidget);
+    expect(history.values.first, 'demo');
+    expect(
+      find.byKey(const ValueKey('app-store-search-field')),
+      findsOneWidget,
+    );
+  });
 }
 
 Widget _testApp({
