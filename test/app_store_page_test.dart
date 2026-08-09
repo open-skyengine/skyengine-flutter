@@ -120,18 +120,27 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('submit-app-store-search')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const ValueKey('toggle-search-filters')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('search-resolution-filter')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey('toggle-search-filters')));
+    await tester.pumpAndSettle();
+
     expect(
       find.byKey(const ValueKey('search-resolution-filter')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('search-sort-filter')), findsOneWidget);
+    expect(find.byKey(const ValueKey('search-order-filter')), findsOneWidget);
     expect(find.text('Software Demo'), findsOneWidget);
     expect(find.text('Game Demo'), findsOneWidget);
     expect(history.values.first, 'demo');
-    expect(client.searchCalls.last.type, isNull);
-    expect(client.searchCalls.last.resolution, isNull);
-    expect(client.searchCalls.last.sortBy, 'created_at');
-    expect(client.searchCalls.last.sortOrder, 'desc');
+    expect(client.searchCalls.last.filters, {
+      'type': 'default',
+      'resolution': 'default',
+      'order': 'default',
+    });
 
     final callsAfterButtonSubmit = client.searchCalls.length;
     await tester.tap(find.byKey(const ValueKey('app-store-search-field')));
@@ -145,19 +154,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('176x220').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('search-sort-filter')));
+    await tester.tap(find.byKey(const ValueKey('search-order-filter')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('发布时间：从旧到新').last);
+    await tester.tap(find.text('下载多').last);
     await tester.pumpAndSettle();
 
     final filtered = client.searchCalls.last;
-    expect(filtered.type, 'software');
-    expect(filtered.resolution, '176x220');
-    expect(filtered.sortBy, 'created_at');
-    expect(filtered.sortOrder, 'asc');
+    expect(filtered.filters, {
+      'type': 'software',
+      'resolution': '176x220',
+      'order': 'download',
+    });
     expect(find.text('Software Demo'), findsOneWidget);
     expect(find.text('Game Demo'), findsNothing);
 
+    await tester.tap(find.byKey(const ValueKey('toggle-search-filters')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Software Demo'));
     await tester.pumpAndSettle();
 
@@ -192,6 +204,7 @@ class _AppQuery {
     required this.type,
     required this.sortBy,
     required this.sortOrder,
+    this.filters = const {},
   });
 
   final int page;
@@ -199,6 +212,7 @@ class _AppQuery {
   final String? type;
   final String? sortBy;
   final String? sortOrder;
+  final Map<String, String?> filters;
 }
 
 class _FakeAppStoreClient extends AppStoreClient {
@@ -207,6 +221,38 @@ class _FakeAppStoreClient extends AppStoreClient {
   final List<_AppQuery> fetchCalls = [];
   final List<_AppQuery> searchCalls = [];
   final List<int> versionAppIds = [];
+
+  @override
+  Future<List<AppStoreSearchConfigGroup>> fetchSearchConfig() async {
+    return const [
+      AppStoreSearchConfigGroup(
+        name: '应用类型',
+        queryKey: 'type',
+        options: [
+          AppStoreSearchConfigOption(name: '全部', value: 'default'),
+          AppStoreSearchConfigOption(name: '软件', value: 'software'),
+          AppStoreSearchConfigOption(name: '游戏', value: 'game'),
+        ],
+      ),
+      AppStoreSearchConfigGroup(
+        name: '分辨率',
+        queryKey: 'resolution',
+        options: [
+          AppStoreSearchConfigOption(name: '全部', value: 'default'),
+          AppStoreSearchConfigOption(name: '176x220', value: '176x220'),
+        ],
+      ),
+      AppStoreSearchConfigGroup(
+        name: '排序',
+        queryKey: 'order',
+        options: [
+          AppStoreSearchConfigOption(name: '默认排序', value: 'default'),
+          AppStoreSearchConfigOption(name: '新发布', value: 'latest'),
+          AppStoreSearchConfigOption(name: '下载多', value: 'download'),
+        ],
+      ),
+    ];
+  }
 
   static final software = AppStoreApp(
     id: 1,
@@ -283,6 +329,32 @@ class _FakeAppStoreClient extends AppStoreClient {
       ),
     );
     final items = type == 'software' ? [software] : [software, game];
+    return PagedResult(
+      items: items,
+      total: items.length,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  @override
+  Future<PagedResult<AppStoreApp>> searchAppsWithFilters({
+    required String query,
+    required int page,
+    int pageSize = 20,
+    Map<String, String?> filters = const {},
+  }) async {
+    searchCalls.add(
+      _AppQuery(
+        page: page,
+        resolution: filters['resolution'],
+        type: filters['type'],
+        sortBy: filters['order'],
+        sortOrder: null,
+        filters: {...filters},
+      ),
+    );
+    final items = filters['type'] == 'software' ? [software] : [software, game];
     return PagedResult(
       items: items,
       total: items.length,
