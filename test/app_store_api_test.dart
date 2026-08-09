@@ -78,15 +78,26 @@ void main() {
     try {
       final list = await client.fetchApps(page: 1, pageSize: 1);
       expect(list.items.single.name, 'Demo App 1');
+      expect(list.items.single.createdAt, DateTime.utc(2026, 6, 14, 8));
       expect(list.hasMore, isTrue);
 
-      final filteredList = await client.fetchApps(page: 3, pageSize: 1);
+      final filteredList = await client.fetchApps(
+        page: 3,
+        pageSize: 1,
+        resolution: '176x220',
+        type: 'game',
+        sortBy: 'name',
+        sortOrder: 'asc',
+      );
       expect(filteredList.items.single.name, 'Demo App 3');
 
       final search = await client.searchApps(
         query: 'demo',
         page: 2,
         pageSize: 1,
+        type: 'software',
+        sortBy: 'created_at',
+        sortOrder: 'desc',
       );
       expect(search.items.single.name, 'Demo App 2');
       expect(search.hasMore, isFalse);
@@ -97,6 +108,7 @@ void main() {
       );
       expect(await downloaded.file.readAsString(), 'MRP-DATA');
       expect(downloaded.file.path.endsWith('demo2.mrp'), isTrue);
+      expect(downloaded.version.packages.single.resolution, '240x320');
 
       final downloadedAgain = await client.downloadLatestVersion(
         app: search.items.single,
@@ -327,7 +339,14 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         ),
       );
     } else if (path == '/api/app/v1/apps' && query['page'] == '3') {
-      expect(query, {'page': '3', 'page_size': '1', 'resolution': '240x320'});
+      expect(query, {
+        'page': '3',
+        'page_size': '1',
+        'resolution': '176x220',
+        'type': 'game',
+        'sort_by': 'name',
+        'sort_order': 'asc',
+      });
       _writeJson(
         request.response,
         _appPage(
@@ -344,6 +363,9 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
         'page': '2',
         'page_size': '1',
         'resolution': '240x320',
+        'type': 'software',
+        'sort_by': 'created_at',
+        'sort_order': 'desc',
       });
       _writeJson(
         request.response,
@@ -368,12 +390,7 @@ Future<void> _serveAppApi(HttpServer server, List<Uri> requests) async {
             'packages': [
               {
                 'id': 21,
-                'model': {
-                  'id': 3,
-                  'name': 'VMRP',
-                  'code': 'vmrp',
-                  'resolution': '240x320',
-                },
+                'resolution': {'id': 3, 'resolution': '240x320'},
                 'file_size': 8,
                 'checksum': 'test',
                 'download_url':
@@ -462,6 +479,8 @@ Map<String, Object> _appPage({
         'manufacturer': {'id': 2, 'name': 'Demo Vendor'},
         'description': 'Demo description',
         'icon_url': '/storage/icons/demo.png',
+        'created_at': '2026-06-14T08:00:00Z',
+        'updated_at': '2026-06-14T08:00:00Z',
       },
     ],
     'total': total,

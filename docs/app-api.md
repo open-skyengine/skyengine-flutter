@@ -151,7 +151,7 @@ function sign({ method, path, query = '', timestamp, nonce, body = '', secret })
 GET /api/app/v1/apps
 ```
 
-返回 active 厂商下的 active 应用。该接口固定只返回 `app` 类型，并且应用至少有一个 published 版本和 active 分辨率包。
+返回 active 厂商下的 active 应用，并且应用至少有一个 published 版本和 active 分辨率包。
 
 请求参数：
 
@@ -160,6 +160,15 @@ GET /api/app/v1/apps
 | `page` | int | 否 | 页码 |
 | `page_size` | int | 否 | 每页数量 |
 | `resolution` | string | 否 | 只返回支持该分辨率的应用 |
+| `type` | string | 否 | 只返回 `game` 或 `software` 类型的应用 |
+| `sort_by` | string | 否 | 排序字段：`name` 或 `created_at`，默认 `created_at` |
+| `sort_order` | string | 否 | 排序方向：`asc` 或 `desc`，默认 `desc` |
+
+按名称升序获取应用：
+
+```http
+GET /api/app/v1/apps?sort_by=name&sort_order=asc
+```
 
 响应示例：
 
@@ -169,7 +178,7 @@ GET /api/app/v1/apps
     {
       "id": 1,
       "app_id": 399484,
-      "type": "app",
+      "type": "game",
       "internal_name": "demo",
       "name": "Demo App",
       "manufacturer": {
@@ -204,6 +213,9 @@ GET /api/app/v1/apps/search
 | `page` | int | 否 | 页码 |
 | `page_size` | int | 否 | 每页数量 |
 | `resolution` | string | 否 | 只搜索支持该分辨率的应用 |
+| `type` | string | 否 | 只搜索 `game` 或 `software` 类型的应用 |
+| `sort_by` | string | 否 | 排序字段：`name` 或 `created_at`，默认 `created_at` |
+| `sort_order` | string | 否 | 排序方向：`asc` 或 `desc`，默认 `desc` |
 
 响应格式同应用列表。
 

@@ -1,94 +1,120 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../services/app_store_api.dart';
-import '../models/mrp_resolution.dart';
+import '../services/search_history.dart';
+import '../widgets/app_store_app_tile.dart';
+import 'app_store_app_details_page.dart';
+import 'app_store_search_page.dart';
 
-typedef RunMrpCallback = void Function(String path, {String? resolution});
+enum _StoreSection {
+  latest('最新', null),
+  software('软件', 'software'),
+  game('游戏', 'game');
+
+  const _StoreSection(this.label, this.apiType);
+
+  final String label;
+  final String? apiType;
+}
 
 class AppStorePage extends StatefulWidget {
-  final String? mrpDir;
-  final RunMrpCallback onRunMrp;
-  final Future<void> Function(String path) onDownloaded;
-
   const AppStorePage({
     super.key,
     required this.mrpDir,
     required this.onRunMrp,
     required this.onDownloaded,
+    this.client,
+    this.searchHistory,
   });
+
+  final String? mrpDir;
+  final RunMrpCallback onRunMrp;
+  final Future<void> Function(String path) onDownloaded;
+  final AppStoreClient? client;
+  final SearchHistoryService? searchHistory;
 
   @override
   State<AppStorePage> createState() => _AppStorePageState();
 }
 
-class _AppStorePageState extends State<AppStorePage> {
+class _AppStorePageState extends State<AppStorePage>
+    with SingleTickerProviderStateMixin {
   static const int _pageSize = 20;
 
-  final TextEditingController _searchController = TextEditingController();
+  late final AppStoreClient _client;
+  late final SearchHistoryService _searchHistory;
+  late final bool _ownsClient;
+  late final bool _ownsSearchHistory;
+  late final TabController _tabController;
   final ScrollController _scrollController = ScrollController();
-  final AppStoreClient _client = AppStoreClient(const AppStoreApiConfig());
-
   final List<AppStoreApp> _apps = [];
-  final Map<int, double?> _downloadProgress = {};
-  Timer? _searchDebounce;
+
+  _StoreSection _section = _StoreSection.latest;
   bool _loadingFirstPage = false;
   bool _loadingMore = false;
   bool _hasMore = true;
   int _nextPage = 1;
+  int _requestGeneration = 0;
   String? _error;
-  String _activeQuery = '';
-  MrpResolution _selectedResolution = kDefaultMrpResolution;
-  DateTime? _lastBottomPromptAt;
 
   @override
   void initState() {
     super.initState();
+    _ownsClient = widget.client == null;
+    _client = widget.client ?? AppStoreClient(const AppStoreApiConfig());
+    _ownsSearchHistory = widget.searchHistory == null;
+    _searchHistory = widget.searchHistory ?? SearchHistoryService();
+    _tabController = TabController(
+      length: _StoreSection.values.length,
+      vsync: this,
+    );
     _scrollController.addListener(_onScroll);
     unawaited(_reload());
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
-    _searchController.dispose();
     _scrollController.dispose();
-    _client.close();
+    _tabController.dispose();
+    if (_ownsClient) {
+      _client.close();
+    }
+    if (_ownsSearchHistory) {
+      unawaited(_searchHistory.close());
+    }
     super.dispose();
   }
 
   Future<void> _reload() async {
+    final generation = ++_requestGeneration;
     setState(() {
       _apps.clear();
       _nextPage = 1;
       _hasMore = true;
       _error = null;
       _loadingFirstPage = true;
-      _activeQuery = _searchController.text.trim();
     });
-
     try {
-      final page = await _fetchPage(1, _activeQuery);
-      if (!mounted) {
+      final result = await _fetchPage(1);
+      if (!mounted || generation != _requestGeneration) {
         return;
       }
       setState(() {
-        _apps.addAll(page.items);
+        _apps.addAll(result.items);
         _nextPage = 2;
-        _hasMore = page.hasMore;
+        _hasMore = result.hasMore;
       });
-    } catch (e) {
-      if (!mounted) {
-        return;
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        setState(() {
+          _error = error.toString();
+          _hasMore = false;
+        });
       }
-      setState(() {
-        _error = e.toString();
-        _hasMore = false;
-      });
     } finally {
-      if (mounted) {
+      if (mounted && generation == _requestGeneration) {
         setState(() => _loadingFirstPage = false);
       }
     }
@@ -98,247 +124,132 @@ class _AppStorePageState extends State<AppStorePage> {
     if (_loadingFirstPage || _loadingMore || !_hasMore) {
       return;
     }
-
+    final generation = _requestGeneration;
     setState(() => _loadingMore = true);
     try {
-      final page = await _fetchPage(_nextPage, _activeQuery);
-      if (!mounted) {
+      final result = await _fetchPage(_nextPage);
+      if (!mounted || generation != _requestGeneration) {
         return;
       }
       setState(() {
-        _apps.addAll(page.items);
+        _apps.addAll(result.items);
         _nextPage += 1;
-        _hasMore = page.hasMore;
+        _hasMore = result.hasMore;
       });
-    } catch (e) {
-      if (!mounted) {
-        return;
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载下一页失败：$error')));
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('加载下一页失败：$e')));
     } finally {
-      if (mounted) {
+      if (mounted && generation == _requestGeneration) {
         setState(() => _loadingMore = false);
       }
     }
   }
 
-  Future<PagedResult<AppStoreApp>> _fetchPage(int page, String query) {
-    if (query.isEmpty) {
-      return _client.fetchApps(
-        page: page,
-        pageSize: _pageSize,
-        resolution: _selectedResolution.label,
-      );
-    }
-    return _client.searchApps(
-      query: query,
+  Future<PagedResult<AppStoreApp>> _fetchPage(int page) {
+    return _client.fetchApps(
       page: page,
       pageSize: _pageSize,
-      resolution: _selectedResolution.label,
+      resolution: null,
+      type: _section.apiType,
+      sortBy: 'created_at',
+      sortOrder: 'desc',
     );
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-    if (_scrollController.position.extentAfter < 280) {
+    if (_scrollController.hasClients &&
+        _scrollController.position.extentAfter < 280) {
       unawaited(_loadMore());
     }
   }
 
-  bool _handleScrollNotification(ScrollNotification notification) {
-    if (_hasMore || _loadingFirstPage || _loadingMore || _apps.isEmpty) {
-      return false;
-    }
-    final metrics = notification.metrics;
-    final atBottom = metrics.pixels >= metrics.maxScrollExtent - 8;
-    final triedPastBottom =
-        notification is OverscrollNotification && notification.overscroll > 0;
-    final userScrolledAtBottom =
-        notification is ScrollUpdateNotification &&
-        notification.dragDetails != null &&
-        atBottom;
-    if (triedPastBottom || userScrolledAtBottom) {
-      _showBottomReached();
-    }
-    return false;
-  }
-
-  void _showBottomReached() {
-    final now = DateTime.now();
-    final last = _lastBottomPromptAt;
-    if (last != null && now.difference(last).inMilliseconds < 1200) {
+  void _selectSection(int index) {
+    final section = _StoreSection.values[index];
+    if (section == _section) {
       return;
     }
-    _lastBottomPromptAt = now;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已经到底了~')));
+    setState(() => _section = section);
+    unawaited(_reload());
   }
 
-  void _onSearchChanged(String value) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
-      if (mounted && value.trim() != _activeQuery) {
-        unawaited(_reload());
-      }
-    });
-  }
-
-  Future<void> _downloadAndRun(AppStoreApp app) async {
-    final mrpDir = widget.mrpDir;
-    if (mrpDir == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('MRP 目录还没有准备好')));
-      return;
-    }
-    if (_downloadProgress.containsKey(app.appId)) {
-      return;
-    }
-
-    setState(() => _downloadProgress[app.appId] = null);
-    var lastShownPercent = -1;
-    try {
-      final downloaded = await _client.downloadLatestVersion(
-        app: app,
-        destinationDir: Directory(mrpDir),
-        resolution: _selectedResolution.label,
-        onProgress: (downloadedBytes, totalBytes) {
-          if (!mounted || totalBytes <= 0) {
-            return;
-          }
-          final fraction = (downloadedBytes / totalBytes).clamp(0.0, 1.0);
-          final percent = (fraction * 100).floor();
-          if (percent == lastShownPercent) {
-            return;
-          }
-          lastShownPercent = percent;
-          setState(() => _downloadProgress[app.appId] = fraction);
-        },
-      );
-      await widget.onDownloaded(downloaded.file.path);
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            downloaded.alreadyDownloaded
-                ? '已下载，直接打开 ${downloaded.file.uri.pathSegments.last}'
-                : '已下载 ${downloaded.file.uri.pathSegments.last}',
-          ),
+  Future<void> _openSearch() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => AppStoreSearchPage(
+          client: _client,
+          searchHistory: _searchHistory,
+          mrpDir: widget.mrpDir,
+          onRunMrp: widget.onRunMrp,
+          onDownloaded: widget.onDownloaded,
         ),
-      );
-      widget.onRunMrp(
-        downloaded.file.path,
-        resolution: _selectedResolution.label,
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('下载失败：$e')));
-    } finally {
-      if (mounted) {
-        setState(() => _downloadProgress.remove(app.appId));
-      }
-    }
+      ),
+    );
+  }
+
+  void _openDetails(AppStoreApp app) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => AppStoreAppDetailsPage(
+          app: app,
+          client: _client,
+          mrpDir: widget.mrpDir,
+          onRunMrp: widget.onRunMrp,
+          onDownloaded: widget.onDownloaded,
+          initialResolution: null,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildSearchBar(),
-        Expanded(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: _handleScrollNotification,
-            child: RefreshIndicator(onRefresh: _reload, child: _buildBody()),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Material(
-      elevation: 1,
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SearchBar(
-              controller: _searchController,
-              hintText: '搜索应用',
-              leading: const Icon(Icons.search),
-              trailing: [
-                if (_searchController.text.isNotEmpty)
-                  IconButton(
-                    tooltip: '清空',
-                    onPressed: () {
-                      _searchController.clear();
-                      unawaited(_reload());
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
-              ],
-              onChanged: (value) {
-                setState(() {});
-                _onSearchChanged(value);
-              },
-              onSubmitted: (_) => unawaited(_reload()),
-            ),
-            const SizedBox(height: 6),
-            Row(
+        Material(
+          elevation: 1,
+          color: Theme.of(context).colorScheme.surface,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Column(
               children: [
-                Text('分辨率', style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(width: 12),
-                DropdownButton<MrpResolution>(
-                  value: _selectedResolution,
-                  isDense: true,
-                  underline: const SizedBox.shrink(),
-                  items: [
-                    for (final resolution in kCommonMrpResolutions)
-                      DropdownMenuItem(
-                        value: resolution,
-                        child: Text(resolution.label),
-                      ),
+                SearchBar(
+                  key: const ValueKey('open-app-store-search'),
+                  constraints: const BoxConstraints.tightFor(
+                    height: kToolbarHeight * 0.7,
+                  ),
+                  hintText: '搜索软件或游戏',
+                  leading: const Icon(Icons.search),
+                  readOnly: true,
+                  onTap: () => unawaited(_openSearch()),
+                ),
+                const SizedBox(height: 6),
+                TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    for (final section in _StoreSection.values)
+                      Tab(text: section.label),
                   ],
-                  onChanged: (resolution) {
-                    if (resolution != null) {
-                      _selectResolution(resolution);
-                    }
-                  },
+                  onTap: _selectSection,
                 ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
+        Expanded(
+          child: RefreshIndicator(onRefresh: _reload, child: _buildBody()),
+        ),
+      ],
     );
-  }
-
-  void _selectResolution(MrpResolution resolution) {
-    if (resolution == _selectedResolution) {
-      return;
-    }
-    setState(() => _selectedResolution = resolution);
-    unawaited(_reload());
   }
 
   Widget _buildBody() {
     if (_loadingFirstPage && _apps.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-
     if (_error != null && _apps.isEmpty) {
       return ListView(
         children: [
@@ -364,18 +275,16 @@ class _AppStorePageState extends State<AppStorePage> {
         ],
       );
     }
-
     if (_apps.isEmpty) {
       return ListView(
         children: const [
           SizedBox(height: 160),
-          Icon(Icons.search_off, size: 48),
+          Icon(Icons.apps_outage, size: 48),
           SizedBox(height: 16),
-          Center(child: Text('没有找到应用')),
+          Center(child: Text('暂无内容')),
         ],
       );
     }
-
     return ListView.separated(
       controller: _scrollController,
       padding: const EdgeInsets.only(top: 8, bottom: 16),
@@ -385,7 +294,12 @@ class _AppStorePageState extends State<AppStorePage> {
         if (index == _apps.length) {
           return _buildFooter();
         }
-        return _buildAppTile(_apps[index]);
+        final app = _apps[index];
+        return AppStoreAppTile(
+          app: app,
+          client: _client,
+          onTap: () => _openDetails(app),
+        );
       },
     );
   }
@@ -400,85 +314,9 @@ class _AppStorePageState extends State<AppStorePage> {
     if (!_hasMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
-        child: Center(child: Text('已经到底了~')),
+        child: Center(child: Text('已经到底了')),
       );
     }
     return const SizedBox(height: 12);
-  }
-
-  Widget _buildAppTile(AppStoreApp app) {
-    final downloading = _downloadProgress.containsKey(app.appId);
-    final progress = _downloadProgress[app.appId];
-    final subtitleParts = [
-      if (app.manufacturer?.name.isNotEmpty ?? false) app.manufacturer!.name,
-      if (app.description.isNotEmpty) app.description,
-    ];
-    return ListTile(
-      leading: _buildIcon(app),
-      title: Text(app.name.isEmpty ? app.internalName : app.name),
-      subtitle: downloading
-          ? _buildDownloadProgress(progress)
-          : Text(
-              subtitleParts.isEmpty
-                  ? 'APP ID: ${app.appId}'
-                  : subtitleParts.join('\n'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-      isThreeLine: !downloading && subtitleParts.length > 1,
-      trailing: SizedBox(
-        width: 48,
-        height: 48,
-        child: downloading
-            ? Padding(
-                padding: const EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  value: progress,
-                ),
-              )
-            : IconButton(
-                tooltip: '下载并启动',
-                onPressed: () => unawaited(_downloadAndRun(app)),
-                icon: const Icon(Icons.play_arrow),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildDownloadProgress(double? progress) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LinearProgressIndicator(value: progress),
-          const SizedBox(height: 4),
-          Text(
-            progress == null ? '正在下载…' : '正在下载 ${(progress * 100).floor()}%',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIcon(AppStoreApp app) {
-    final iconUrl = app.iconUrl;
-    if (iconUrl == null || iconUrl.isEmpty) {
-      return const CircleAvatar(child: Icon(Icons.apps));
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        _client.resolveAssetUri(iconUrl).toString(),
-        width: 42,
-        height: 42,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const CircleAvatar(child: Icon(Icons.apps)),
-      ),
-    );
   }
 }
