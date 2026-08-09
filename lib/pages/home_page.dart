@@ -86,8 +86,6 @@ Stream<MrpOpenRequest> _defaultOpenMrpStreamProvider() {
   return const AndroidMrpOpen().openMrpRequests();
 }
 
-enum _MrpRemovalAction { removeFromList, deleteFile }
-
 enum _LocalMrpMenuAction { details }
 
 class _LocalMrpListEntry {
@@ -638,60 +636,30 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _confirmRemoveMrp(LocalMrpFile file) async {
     final name = file.displayName;
-    final action = await showDialog<_MrpRemovalAction>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: Text('删除 $name？'),
-          content: const Text('是否同步删除文件？'),
+          content: const Text('将会同步删除文件！'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('取消'),
             ),
-            TextButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(_MrpRemovalAction.removeFromList),
-              child: const Text('仅从列表移除'),
-            ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(_MrpRemovalAction.deleteFile),
-              child: const Text('同步删除文件'),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('确定'),
             ),
           ],
         );
       },
     );
-    if (!mounted || action == null) {
+    if (!mounted || confirmed != true) {
       return;
     }
 
-    switch (action) {
-      case _MrpRemovalAction.removeFromList:
-        await _removeMrpFromList(file.path);
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已从列表移除：$name')));
-      case _MrpRemovalAction.deleteFile:
-        await _deleteMrpFile(file.path);
-    }
-  }
-
-  Future<void> _removeMrpFromList(String path) async {
-    final key = _fileListKey(path);
-    await _mrpDatabase.delete(path);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _mrpFiles = _mrpFiles
-          .where((entry) => _localFiles.fileListKey(entry.file.path) != key)
-          .toList();
-    });
+    await _deleteMrpFile(file.path);
   }
 
   Future<void> _deleteMrpFile(String path) async {
@@ -716,8 +684,6 @@ class _HomePageState extends State<HomePage> {
       ).showSnackBar(SnackBar(content: Text('删除失败：$e')));
     }
   }
-
-  String _fileListKey(String path) => _localFiles.fileListKey(path);
 
   String _fileName(String path) => _localFiles.fileName(path);
 
