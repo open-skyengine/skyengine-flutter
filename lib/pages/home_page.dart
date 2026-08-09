@@ -823,38 +823,47 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SkyEngine'),
-        actions: [
-          if (_selectedIndex == 0)
-            IconButton(
-              onPressed: _pickAndCopyMrp,
-              tooltip: '导入 MRP 文件',
-              icon: const Icon(Icons.add),
+      appBar: _selectedIndex == 1
+          ? null
+          : AppBar(
+              title: const Text('SkyEngine'),
+              actions: [
+                if (_selectedIndex == 0)
+                  IconButton(
+                    onPressed: _pickAndCopyMrp,
+                    tooltip: '导入 MRP 文件',
+                    icon: const Icon(Icons.add),
+                  ),
+                if (_selectedIndex == 2)
+                  IconButton(
+                    tooltip: Theme.of(context).brightness == Brightness.dark
+                        ? '切换到浅色模式'
+                        : '切换到深色模式',
+                    onPressed: () {
+                      unawaited(_toggleTheme());
+                    },
+                    icon: Icon(
+                      Theme.of(context).brightness == Brightness.dark
+                          ? Icons.light_mode
+                          : Icons.dark_mode,
+                    ),
+                  ),
+              ],
             ),
-          if (_selectedIndex == 2)
-            IconButton(
-              tooltip: Theme.of(context).brightness == Brightness.dark
-                  ? '切换到浅色模式'
-                  : '切换到深色模式',
-              onPressed: () {
-                unawaited(_toggleTheme());
-              },
-              icon: Icon(
-                Theme.of(context).brightness == Brightness.dark
-                    ? Icons.light_mode
-                    : Icons.dark_mode,
-              ),
-            ),
-        ],
-      ),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
           _buildLocalList(),
           Stack(
             children: [
-              widget.appStoreBuilder(_mrpDir, _runMrp, _registerDownloadedMrp),
+              SafeArea(
+                bottom: false,
+                child: widget.appStoreBuilder(
+                  _mrpDir,
+                  _runMrp,
+                  _registerDownloadedMrp,
+                ),
+              ),
               if (_downloadingUpdate)
                 const Positioned(
                   left: 0,

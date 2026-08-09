@@ -59,12 +59,14 @@ void main() {
       await tester.tap(find.text('商店'));
       await tester.pump();
 
+      expect(find.text('SkyEngine'), findsNothing);
       expect(find.text('搜索应用'), findsOneWidget);
       expect(find.byTooltip('导入 MRP 文件'), findsNothing);
 
       await tester.tap(find.text('更多'));
       await tester.pump();
 
+      expect(find.text('SkyEngine'), findsOneWidget);
       expect(find.byTooltip('导入 MRP 文件'), findsNothing);
       expect(find.byTooltip('切换到深色模式'), findsOneWidget);
       expect(find.text('深色设置'), findsOneWidget);

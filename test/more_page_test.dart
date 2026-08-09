@@ -18,10 +18,18 @@ void main() {
     await tester.tap(find.text('关于'));
     await tester.pumpAndSettle();
 
+    expect(find.text('当前版本'), findsOneWidget);
+    expect(find.byIcon(Icons.history), findsOneWidget);
+    expect(find.text('SkyEngine'), findsNothing);
     expect(find.text('版本 1.0.1 (4)'), findsOneWidget);
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.text('调试'), findsOneWidget);
-    expect(find.text('GitHub'), findsOneWidget);
+    expect(find.text('Github'), findsOneWidget);
+    final orderedTitles = ['当前版本', '调试', '检查更新', 'Github'];
+    final positions = orderedTitles
+        .map((title) => tester.getTopLeft(find.text(title)).dy)
+        .toList();
+    expect(positions, orderedEquals([...positions]..sort()));
   });
 
   testWidgets('check update tile starts an immediate update check', (
@@ -118,7 +126,7 @@ void main() {
 
     await tester.tap(find.text('关于'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('GitHub'));
+    await tester.tap(find.text('Github'));
     await tester.pump();
 
     expect(openedUri, Uri.parse('https://github.com/open-skyengine'));

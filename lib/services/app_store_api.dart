@@ -89,6 +89,8 @@ class AppStoreApp {
   final AppStoreManufacturer? manufacturer;
   final String description;
   final String? iconUrl;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const AppStoreApp({
     required this.id,
@@ -99,6 +101,8 @@ class AppStoreApp {
     required this.manufacturer,
     required this.description,
     required this.iconUrl,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory AppStoreApp.fromJson(Map<String, dynamic> json) {
@@ -114,6 +118,8 @@ class AppStoreApp {
           : null,
       description: _readString(json['description']),
       iconUrl: _nullableString(json['icon_url']),
+      createdAt: _readDateTime(json['created_at']),
+      updatedAt: _readDateTime(json['updated_at']),
     );
   }
 }
@@ -144,6 +150,7 @@ class AppStoreModel {
 class AppStorePackage {
   final int id;
   final AppStoreModel? model;
+  final String? resolution;
   final int fileSize;
   final String checksum;
   final String? downloadUrl;
@@ -151,6 +158,7 @@ class AppStorePackage {
   const AppStorePackage({
     required this.id,
     required this.model,
+    this.resolution,
     required this.fileSize,
     required this.checksum,
     required this.downloadUrl,
@@ -158,11 +166,16 @@ class AppStorePackage {
 
   factory AppStorePackage.fromJson(Map<String, dynamic> json) {
     final modelJson = json['model'];
+    final resolutionJson = json['resolution'];
+    final parsedModel = modelJson is Map<String, dynamic>
+        ? AppStoreModel.fromJson(modelJson)
+        : null;
     return AppStorePackage(
       id: _readInt(json['id']),
-      model: modelJson is Map<String, dynamic>
-          ? AppStoreModel.fromJson(modelJson)
-          : null,
+      model: parsedModel,
+      resolution: resolutionJson is Map<String, dynamic>
+          ? _nullableString(resolutionJson['resolution'])
+          : parsedModel?.resolution,
       fileSize: _readInt(json['file_size']),
       checksum: _readString(json['checksum']),
       downloadUrl: _nullableString(json['download_url']),
@@ -177,6 +190,9 @@ class AppStoreVersion {
   final String version;
   final String changelog;
   final List<AppStorePackage> packages;
+  final DateTime? publishedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const AppStoreVersion({
     required this.id,
@@ -185,6 +201,9 @@ class AppStoreVersion {
     required this.version,
     required this.changelog,
     required this.packages,
+    this.publishedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory AppStoreVersion.fromJson(Map<String, dynamic> json) {
@@ -201,6 +220,9 @@ class AppStoreVersion {
                 .map(AppStorePackage.fromJson)
                 .toList()
           : const [],
+      publishedAt: _readDateTime(json['published_at']),
+      createdAt: _readDateTime(json['created_at']),
+      updatedAt: _readDateTime(json['updated_at']),
     );
   }
 }
@@ -366,7 +388,10 @@ class AppStoreClient {
   Future<PagedResult<AppStoreApp>> fetchApps({
     required int page,
     int pageSize = 20,
-    String resolution = '240x320',
+    String? resolution = '240x320',
+    String? type,
+    String? sortBy,
+    String? sortOrder,
   }) {
     return _fetchAppPage(
       '/apps',
@@ -374,6 +399,9 @@ class AppStoreClient {
         'page': '$page',
         'page_size': '$pageSize',
         'resolution': resolution,
+        'type': type,
+        'sort_by': sortBy,
+        'sort_order': sortOrder,
       }),
     );
   }
@@ -382,7 +410,10 @@ class AppStoreClient {
     required String query,
     required int page,
     int pageSize = 20,
-    String resolution = '240x320',
+    String? resolution = '240x320',
+    String? type,
+    String? sortBy,
+    String? sortOrder,
   }) {
     return _fetchAppPage(
       '/apps/search',
@@ -391,6 +422,9 @@ class AppStoreClient {
         'page': '$page',
         'page_size': '$pageSize',
         'resolution': resolution,
+        'type': type,
+        'sort_by': sortBy,
+        'sort_order': sortOrder,
       }),
     );
   }
@@ -399,7 +433,7 @@ class AppStoreClient {
     required int appId,
     int page = 1,
     int pageSize = 1,
-    String resolution = '240x320',
+    String? resolution = '240x320',
   }) async {
     final json = await _getJson(
       '/apps/$appId/versions',
@@ -1222,6 +1256,14 @@ String? _nullableString(dynamic value) {
     return null;
   }
   return value.toString();
+}
+
+DateTime? _readDateTime(dynamic value) {
+  final text = _nullableString(value)?.trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(text);
 }
 
 bool _readBool(dynamic value) {
