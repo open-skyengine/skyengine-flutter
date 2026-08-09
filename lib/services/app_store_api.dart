@@ -324,6 +324,52 @@ class AppStoreConfig {
   }
 }
 
+class AppStoreSearchConfigOption {
+  final String name;
+  final String value;
+
+  const AppStoreSearchConfigOption({required this.name, required this.value});
+
+  factory AppStoreSearchConfigOption.fromJson(Map<String, dynamic> json) {
+    return AppStoreSearchConfigOption(
+      name: _readString(json['name']),
+      value: _readString(json['value']),
+    );
+  }
+}
+
+class AppStoreSearchConfigGroup {
+  final String name;
+  final String queryKey;
+  final List<AppStoreSearchConfigOption> options;
+
+  const AppStoreSearchConfigGroup({
+    required this.name,
+    required this.queryKey,
+    required this.options,
+  });
+
+  factory AppStoreSearchConfigGroup.fromJson(Map<String, dynamic> json) {
+    final optionsJson = json['options'];
+    final options = optionsJson is List
+        ? optionsJson
+              .whereType<Map<String, dynamic>>()
+              .map(AppStoreSearchConfigOption.fromJson)
+              .where(
+                (option) =>
+                    option.name.trim().isNotEmpty &&
+                    option.value.trim().isNotEmpty,
+              )
+              .toList()
+        : const <AppStoreSearchConfigOption>[];
+    return AppStoreSearchConfigGroup(
+      name: _readString(json['name']),
+      queryKey: _readString(json['query_key']),
+      options: options,
+    );
+  }
+}
+
 class DownloadedMrp {
   final File file;
   final AppStoreVersion version;
@@ -427,6 +473,24 @@ class AppStoreClient {
         'sort_order': sortOrder,
       }),
     );
+  }
+
+  Future<PagedResult<AppStoreApp>> searchAppsWithFilters({
+    required String query,
+    required int page,
+    int pageSize = 20,
+    Map<String, String?> filters = const {},
+  }) {
+    final queryParams = <String, String?>{
+      'q': query,
+      'page': '$page',
+      'page_size': '$pageSize',
+      ...filters,
+    };
+    queryParams['q'] = query;
+    queryParams['page'] = '$page';
+    queryParams['page_size'] = '$pageSize';
+    return _fetchAppPage('/apps/search', _queryParams(queryParams));
   }
 
   Future<PagedResult<AppStoreVersion>> fetchVersions({
@@ -717,6 +781,23 @@ class AppStoreClient {
     return AppStoreConfig.fromJson(json);
   }
 
+  Future<List<AppStoreSearchConfigGroup>> fetchSearchConfig() async {
+    final data = await _getJsonValue('/search-config', const {});
+    if (data is! List) {
+      throw const AppStoreApiException('服务端返回格式无效');
+    }
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(AppStoreSearchConfigGroup.fromJson)
+        .where(
+          (group) =>
+              group.name.trim().isNotEmpty &&
+              group.queryKey.trim().isNotEmpty &&
+              group.options.isNotEmpty,
+        )
+        .toList();
+  }
+
   Uri resolveAssetUri(String pathOrUrl) => _resolveApiUri(pathOrUrl);
 
   Future<File?> _findDownloadedFile({
@@ -990,6 +1071,14 @@ class AppStoreClient {
     String path,
     Map<String, String> query,
   ) async {
+    final data = await _getJsonValue(path, query);
+    if (data is! Map<String, dynamic>) {
+      throw const AppStoreApiException('服务端返回格式无效');
+    }
+    return data;
+  }
+
+  Future<dynamic> _getJsonValue(String path, Map<String, String> query) async {
     final response = await _getResponse(_buildUri(path, query));
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -998,11 +1087,11 @@ class AppStoreClient {
         statusCode: response.statusCode,
       );
     }
-    final data = jsonDecode(body);
-    if (data is! Map<String, dynamic>) {
+    try {
+      return jsonDecode(body);
+    } on FormatException {
       throw const AppStoreApiException('服务端返回格式无效');
     }
-    return data;
   }
 
   Future<HttpClientResponse> _getResponse(Uri uri) async {

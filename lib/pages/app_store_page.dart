@@ -221,6 +221,8 @@ class _AppStorePageState extends State<AppStorePage>
                   constraints: const BoxConstraints.tightFor(
                     height: kToolbarHeight * 0.7,
                   ),
+                  elevation: const WidgetStatePropertyAll(0),
+                  shadowColor: const WidgetStatePropertyAll(Colors.transparent),
                   hintText: '搜索软件或游戏',
                   leading: const Icon(Icons.search),
                   readOnly: true,
