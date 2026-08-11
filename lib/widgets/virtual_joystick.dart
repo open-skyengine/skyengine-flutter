@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
+
 enum JoystickDirection { up, down, left, right }
 
 class VirtualJoystickConfirmButton extends StatelessWidget {
@@ -19,9 +21,10 @@ class VirtualJoystickConfirmButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
       button: true,
-      label: '确定',
+      label: l10n.confirm,
       child: GestureDetector(
         key: const ValueKey('virtual-joystick-confirm-button'),
         behavior: HitTestBehavior.opaque,
@@ -35,8 +38,11 @@ class VirtualJoystickConfirmButton extends StatelessWidget {
               shape: BoxShape.circle,
               color: Colors.grey[800],
             ),
-            child: const Center(
-              child: Text('确定', style: TextStyle(color: Colors.white)),
+            child: Center(
+              child: Text(
+                l10n.confirm,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ),
         ),
@@ -227,7 +233,7 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
     final knobSize = widget.size * 0.38;
 
     return Semantics(
-      label: '方向摇杆',
+      label: context.l10n.directionalJoystick,
       child: Listener(
         key: const ValueKey('virtual-joystick'),
         behavior: HitTestBehavior.opaque,

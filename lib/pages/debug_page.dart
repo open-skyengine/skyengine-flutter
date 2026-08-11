@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
 import '../skyengine/skyengine_engine.dart';
 
 class DebugPage extends StatelessWidget {
@@ -11,12 +12,13 @@ class DebugPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return ListView(
       children: [
         ListTile(
           leading: const Icon(Icons.keyboard),
-          title: const Text('按键测试'),
-          subtitle: const Text('记录物理按键和左右软键映射'),
+          title: Text(l10n.keyTest),
+          subtitle: Text(l10n.keyTestDescription),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.of(
@@ -45,7 +47,7 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
   final ScrollController _scrollController = ScrollController();
   final List<String> _logs = [];
   int? _lastVmrpKeyCode;
-  String _lastSummary = '等待按键';
+  String? _lastSummary;
 
   @override
   void initState() {
@@ -274,14 +276,14 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
     }
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('按键日志已复制')));
+    ).showSnackBar(SnackBar(content: Text(context.l10n.keyLogCopied)));
   }
 
   void _clearLogs() {
     setState(() {
       _logs.clear();
       _lastVmrpKeyCode = null;
-      _lastSummary = '等待按键';
+      _lastSummary = null;
     });
   }
 
@@ -338,17 +340,18 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('按键测试'),
+        title: Text(l10n.keyTest),
         actions: [
           IconButton(
-            tooltip: '复制日志',
+            tooltip: l10n.copyKeyLog,
             onPressed: _logs.isEmpty ? null : _copyLogs,
             icon: const Icon(Icons.copy),
           ),
           IconButton(
-            tooltip: '清空日志',
+            tooltip: l10n.clearKeyLog,
             onPressed: _logs.isEmpty ? null : _clearLogs,
             icon: const Icon(Icons.delete_outline),
           ),
@@ -368,18 +371,18 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
                   child: Row(
                     children: [
                       _KeyStateChip(
-                        label: '左软键',
+                        label: l10n.leftSoftKey,
                         active: _lastVmrpKeyCode == SkyEngineKey.softLeft,
                       ),
                       const SizedBox(width: 8),
                       _KeyStateChip(
-                        label: '右软键',
+                        label: l10n.rightSoftKey,
                         active: _lastVmrpKeyCode == SkyEngineKey.softRight,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          _lastSummary,
+                          _lastSummary ?? l10n.waitForKey,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium,
@@ -391,7 +394,7 @@ class _DebugKeyTestPageState extends State<DebugKeyTestPage> {
               ),
               Expanded(
                 child: _logs.isEmpty
-                    ? const Center(child: Text('按下物理按键后，这里会显示日志'))
+                    ? Center(child: Text(l10n.pressPhysicalKeyForLog))
                     : Scrollbar(
                         controller: _scrollController,
                         child: SingleChildScrollView(

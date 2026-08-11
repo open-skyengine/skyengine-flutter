@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'l10n/app_localizations.dart';
+import 'l10n/l10n.dart';
 import 'pages/app_store_page.dart';
 import 'pages/home_page.dart';
 import 'pages/mrp_player_page.dart';
@@ -50,6 +52,9 @@ class _MyAppState extends State<MyApp> {
       builder: (context, _) {
         return MaterialApp(
           title: 'SkyEngine',
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localeResolutionCallback: (locale, _) => resolveAppLocale(locale),
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
           themeMode: _themeSettings.themeMode,

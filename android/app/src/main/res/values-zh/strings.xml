@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SkyEngine</string>
+    <string name="update_download_invalid_arguments">更新下载参数无效</string>
+    <string name="try_again_later">请稍后重试</string>
+    <string name="update_package_directory_invalid">更新包目录无效</string>
+    <string name="update_package_directory_create_failed">无法创建更新包目录</string>
+    <string name="download_failed_http">下载失败（HTTP %1$d）</string>
+    <string name="update_package_incomplete">下载的更新包不完整</string>
+    <string name="update_package_checksum_failed">下载的更新包校验失败</string>
+    <string name="update_package_replace_failed">无法替换旧更新包</string>
+    <string name="update_package_save_failed">无法保存更新包</string>
+    <string name="download_redirect_invalid">下载跳转地址无效（HTTP %1$d）</string>
+    <string name="download_redirect_too_many">下载跳转次数过多</string>
+    <string name="download_progress">%1$d%%（%2$s / %3$s）</string>
+    <string name="downloaded_bytes">已下载 %1$s</string>
+    <string name="update_downloading">正在下载更新</string>
+    <string name="update_download_complete">更新下载完成</string>
+    <string name="tap_to_install">点击安装 %1$s</string>
+    <string name="update_download_failed">更新下载失败</string>
+    <string name="app_update_channel_name">应用更新</string>
+    <string name="app_update_channel_description">显示应用更新下载进度</string>
+    <string name="update_already_downloading">已有更新正在下载</string>
+    <string name="background_download_start_failed">后台下载无法启动</string>
+    <string name="install_unknown_apps_permission">请允许安装未知来源应用，返回后会自动继续安装</string>
+    <string name="notification_permission_disabled">通知权限未开启，下载进度不会显示在通知栏</string>
+    <string name="system_notifications_disabled">系统通知已关闭，下载进度不会显示在通知栏</string>
+    <string name="update_notifications_disabled">应用更新通知已关闭，下载进度不会显示在通知栏</string>
+    <string name="notifications_unavailable">通知不可用，下载进度不会显示在通知栏</string>
+</resources>

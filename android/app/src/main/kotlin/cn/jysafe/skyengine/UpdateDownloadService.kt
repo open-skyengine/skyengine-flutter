@@ -30,7 +30,7 @@ class UpdateDownloadService : Service() {
         startForeground(NOTIFICATION_ID, progressNotification(0L, request?.expectedSize ?: 0L))
 
         if (request == null) {
-            finishWithError("更新下载参数无效")
+            finishWithError(getString(R.string.update_download_invalid_arguments))
             return START_NOT_STICKY
         }
 
@@ -41,7 +41,8 @@ class UpdateDownloadService : Service() {
                 sendResult(apk.absolutePath, null)
             } catch (error: Exception) {
                 request.tempFile.delete()
-                val message = error.message?.takeIf { it.isNotBlank() } ?: "请稍后重试"
+                val message = error.message?.takeIf { it.isNotBlank() }
+                    ?: getString(R.string.try_again_later)
                 showFailedNotification(message)
                 sendResult(null, message)
             } finally {
@@ -59,9 +60,10 @@ class UpdateDownloadService : Service() {
 
     private fun download(request: DownloadRequest): File {
         val target = request.target
-        val parent = target.parentFile ?: error("更新包目录无效")
+        val parent = target.parentFile
+            ?: error(getString(R.string.update_package_directory_invalid))
         if (!parent.exists() && !parent.mkdirs()) {
-            error("无法创建更新包目录")
+            error(getString(R.string.update_package_directory_create_failed))
         }
 
         parent.listFiles()?.forEach { file ->
@@ -83,7 +85,13 @@ class UpdateDownloadService : Service() {
                     ?.bufferedReader()
                     ?.use { it.readText().trim().take(500) }
                     .orEmpty()
-                error(if (body.isEmpty()) "下载失败（HTTP $status）" else body)
+                error(
+                    if (body.isEmpty()) {
+                        getString(R.string.download_failed_http, status)
+                    } else {
+                        body
+                    },
+                )
             }
 
             val total = if (request.expectedSize > 0L) {
@@ -122,17 +130,17 @@ class UpdateDownloadService : Service() {
             if (downloaded <= 0L ||
                 (request.expectedSize > 0L && downloaded != request.expectedSize)
             ) {
-                error("下载的更新包不完整")
+                error(getString(R.string.update_package_incomplete))
             }
             if (!checksumMatches(request.tempFile, request.checksum)) {
-                error("下载的更新包校验失败")
+                error(getString(R.string.update_package_checksum_failed))
             }
 
             if (target.exists() && !target.delete()) {
-                error("无法替换旧更新包")
+                error(getString(R.string.update_package_replace_failed))
             }
             if (!request.tempFile.renameTo(target)) {
-                error("无法保存更新包")
+                error(getString(R.string.update_package_save_failed))
             }
             return target
         } finally {
@@ -162,11 +170,11 @@ class UpdateDownloadService : Service() {
             val location = connection.getHeaderField("Location")
             connection.disconnect()
             if (location.isNullOrBlank()) {
-                error("下载跳转地址无效（HTTP $status）")
+                error(getString(R.string.download_redirect_invalid, status))
             }
             redirectCount += 1
             if (redirectCount > MAX_REDIRECTS) {
-                error("下载跳转次数过多")
+                error(getString(R.string.download_redirect_too_many))
             }
             url = URL(url, location)
         }
@@ -223,12 +231,17 @@ class UpdateDownloadService : Service() {
             0
         }
         val text = if (hasTotal) {
-            "$percent%（${formatBytes(downloaded)} / ${formatBytes(total)}）"
+            getString(
+                R.string.download_progress,
+                percent,
+                formatBytes(downloaded),
+                formatBytes(total),
+            )
         } else {
-            "已下载 ${formatBytes(downloaded)}"
+            getString(R.string.downloaded_bytes, formatBytes(downloaded))
         }
         return notificationBuilder()
-            .setContentTitle("正在下载更新")
+            .setContentTitle(getString(R.string.update_downloading))
             .setContentText(text)
             .setContentIntent(openAppIntent())
             .setOngoing(true)
@@ -251,8 +264,8 @@ class UpdateDownloadService : Service() {
         )
         notify(
             notificationBuilder()
-                .setContentTitle("更新下载完成")
-                .setContentText("点击安装 ${apk.name}")
+                .setContentTitle(getString(R.string.update_download_complete))
+                .setContentText(getString(R.string.tap_to_install, apk.name))
                 .setContentIntent(contentIntent)
                 .setOngoing(false)
                 .setOnlyAlertOnce(false)
@@ -265,7 +278,7 @@ class UpdateDownloadService : Service() {
     private fun showFailedNotification(message: String) {
         notify(
             notificationBuilder()
-                .setContentTitle("更新下载失败")
+                .setContentTitle(getString(R.string.update_download_failed))
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setContentIntent(openAppIntent())
@@ -314,14 +327,13 @@ class UpdateDownloadService : Service() {
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(NOTIFICATION_CHANNEL_ID) != null) return
         manager.createNotificationChannel(
             NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "应用更新",
+                getString(R.string.app_update_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "显示应用更新下载进度"
+                description = getString(R.string.app_update_channel_description)
             },
         )
     }

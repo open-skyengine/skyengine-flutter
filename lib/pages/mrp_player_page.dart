@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/l10n.dart';
 import '../models/keypad_mode.dart';
 import '../services/emulator_settings.dart';
 import '../services/emulator_runtime_config.dart';
@@ -130,7 +131,7 @@ class _EditTextDialogState extends State<_EditTextDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('输入'),
+      title: Text(context.l10n.input),
       content: TextField(
         controller: _controller,
         autofocus: true,
@@ -141,11 +142,11 @@ class _EditTextDialogState extends State<_EditTextDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(context.l10n.cancel),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('确定'),
+          child: Text(context.l10n.confirm),
         ),
       ],
     );
@@ -761,7 +762,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       context: context,
       builder: (ctx) {
         return SimpleDialog(
-          title: const Text('切换键盘'),
+          title: Text(ctx.l10n.switchKeypad),
           children: [
             for (final mode in KeypadMode.values)
               SimpleDialogOption(
@@ -774,7 +775,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                           ? const Icon(Icons.check, size: 20)
                           : null,
                     ),
-                    Text(mode.label),
+                    Text(mode.localizedLabel(ctx.l10n)),
                   ],
                 ),
               ),
@@ -804,7 +805,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       context: context,
       builder: (ctx) {
         return SimpleDialog(
-          title: const Text('切换分辨率'),
+          title: Text(ctx.l10n.switchResolution),
           children: [
             for (final resolution in _resolutionOptions)
               SimpleDialogOption(
@@ -852,7 +853,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       context: context,
       builder: (ctx) {
         return SimpleDialog(
-          title: const Text('图像处理方式'),
+          title: Text(ctx.l10n.imageProcessingMode),
           children: [
             for (final mode in SkyEngineImageProcessingMode.values)
               SimpleDialogOption(
@@ -1009,7 +1010,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                 borderRadius: BorderRadius.circular(4),
                 child: IconButton(
                   key: const ValueKey('mrp-player-back'),
-                  tooltip: '返回',
+                  tooltip: context.l10n.back,
                   color: Colors.white,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: _handleBack,
@@ -1032,7 +1033,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
 
   Widget _buildMoreButton({Color? iconColor}) {
     return PopupMenuButton<_PlayerMenuAction>(
-      tooltip: '更多',
+      tooltip: context.l10n.more,
       iconColor: iconColor,
       icon: const Icon(Icons.more_vert),
       onSelected: _handleMenuAction,
@@ -1048,7 +1049,11 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
           children: [
             Icon(_isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
             const SizedBox(width: 12),
-            Text(_isFullscreen ? '退出全屏' : '进入全屏'),
+            Text(
+              _isFullscreen
+                  ? context.l10n.exitFullscreen
+                  : context.l10n.enterFullscreen,
+            ),
           ],
         ),
       ),
@@ -1062,17 +1067,17 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                   : Icons.keyboard,
             ),
             const SizedBox(width: 12),
-            const Text('切换键盘'),
+            Text(context.l10n.switchKeypad),
           ],
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: _PlayerMenuAction.switchResolution,
         child: Row(
           children: [
-            Icon(Icons.aspect_ratio),
-            SizedBox(width: 12),
-            Text('切换分辨率'),
+            const Icon(Icons.aspect_ratio),
+            const SizedBox(width: 12),
+            Text(context.l10n.switchResolution),
           ],
         ),
       ),
@@ -1082,7 +1087,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
           children: [
             const Icon(Icons.image),
             const SizedBox(width: 12),
-            Text('图像处理方式: ${_imageProcessingMode.label}'),
+            Text(
+              context.l10n.imageProcessingModeValue(_imageProcessingMode.label),
+            ),
           ],
         ),
       ),
@@ -1105,7 +1112,10 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
                 style: TextStyle(color: _isFullscreen ? Colors.white : null),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _handleBack, child: const Text('返回')),
+              ElevatedButton(
+                onPressed: _handleBack,
+                child: Text(context.l10n.back),
+              ),
             ],
           ),
         ),
@@ -1278,19 +1288,35 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
         children: [
           _keypadRow([
             SizedBox(width: buttonWidth),
-            _keyButton('上', SkyEngineKey.up, width: buttonWidth),
+            _keyButton(context.l10n.up, SkyEngineKey.up, width: buttonWidth),
             SizedBox(width: buttonWidth),
           ], columnGap: columnGap),
           const SizedBox(height: _keypadRowGap),
           _keypadRow([
-            _keyButton('左', SkyEngineKey.left, width: buttonWidth),
-            _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
-            _keyButton('右', SkyEngineKey.right, width: buttonWidth),
+            _keyButton(
+              context.l10n.left,
+              SkyEngineKey.left,
+              width: buttonWidth,
+            ),
+            _keyButton(
+              context.l10n.confirm,
+              SkyEngineKey.select,
+              width: buttonWidth,
+            ),
+            _keyButton(
+              context.l10n.right,
+              SkyEngineKey.right,
+              width: buttonWidth,
+            ),
           ], columnGap: columnGap),
           const SizedBox(height: _keypadRowGap),
           _keypadRow([
             SizedBox(width: buttonWidth),
-            _keyButton('下', SkyEngineKey.down, width: buttonWidth),
+            _keyButton(
+              context.l10n.down,
+              SkyEngineKey.down,
+              width: buttonWidth,
+            ),
             SizedBox(width: buttonWidth),
           ], columnGap: columnGap),
         ],
@@ -1302,9 +1328,9 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _keyButton('左软键', SkyEngineKey.softLeft),
+        _keyButton(context.l10n.leftSoftKey, SkyEngineKey.softLeft),
         const SizedBox(height: _keypadRowGap),
-        _keyButton('右软键', SkyEngineKey.softRight),
+        _keyButton(context.l10n.rightSoftKey, SkyEngineKey.softRight),
       ],
     );
   }
@@ -1341,7 +1367,7 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
             color: Colors.black54,
             borderRadius: BorderRadius.circular(4),
             child: IconButton(
-              tooltip: '退出全屏',
+              tooltip: context.l10n.exitFullscreen,
               color: Colors.white,
               icon: const Icon(Icons.fullscreen_exit),
               onPressed: () => unawaited(_setFullscreen(false)),
@@ -1414,20 +1440,36 @@ class _MrpPlayerPageState extends State<MrpPlayerPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _keypadRow([
-          _keyButton('左软键', SkyEngineKey.softLeft, width: buttonWidth),
-          _keyButton('上', SkyEngineKey.up, width: buttonWidth),
-          _keyButton('右软键', SkyEngineKey.softRight, width: buttonWidth),
+          _keyButton(
+            context.l10n.leftSoftKey,
+            SkyEngineKey.softLeft,
+            width: buttonWidth,
+          ),
+          _keyButton(context.l10n.up, SkyEngineKey.up, width: buttonWidth),
+          _keyButton(
+            context.l10n.rightSoftKey,
+            SkyEngineKey.softRight,
+            width: buttonWidth,
+          ),
         ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
         _keypadRow([
-          _keyButton('左', SkyEngineKey.left, width: buttonWidth),
-          _keyButton('确定', SkyEngineKey.select, width: buttonWidth),
-          _keyButton('右', SkyEngineKey.right, width: buttonWidth),
+          _keyButton(context.l10n.left, SkyEngineKey.left, width: buttonWidth),
+          _keyButton(
+            context.l10n.confirm,
+            SkyEngineKey.select,
+            width: buttonWidth,
+          ),
+          _keyButton(
+            context.l10n.right,
+            SkyEngineKey.right,
+            width: buttonWidth,
+          ),
         ], columnGap: columnGap),
         const SizedBox(height: _keypadRowGap),
         _keypadRow([
           SizedBox(width: buttonWidth),
-          _keyButton('下', SkyEngineKey.down, width: buttonWidth),
+          _keyButton(context.l10n.down, SkyEngineKey.down, width: buttonWidth),
           SizedBox(width: buttonWidth),
         ], columnGap: columnGap),
       ],

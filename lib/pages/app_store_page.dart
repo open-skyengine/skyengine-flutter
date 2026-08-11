@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../services/app_store_api.dart';
 import '../services/search_history.dart';
 import '../widgets/app_store_app_tile.dart';
@@ -9,14 +11,19 @@ import 'app_store_app_details_page.dart';
 import 'app_store_search_page.dart';
 
 enum _StoreSection {
-  latest('最新', null),
-  software('软件', 'software'),
-  game('游戏', 'game');
+  latest(null),
+  software('software'),
+  game('game');
 
-  const _StoreSection(this.label, this.apiType);
+  const _StoreSection(this.apiType);
 
-  final String label;
   final String? apiType;
+
+  String localizedLabel(AppLocalizations l10n) => switch (this) {
+    _StoreSection.latest => l10n.latest,
+    _StoreSection.software => l10n.software,
+    _StoreSection.game => l10n.game,
+  };
 }
 
 class _StoreTabCache {
@@ -174,7 +181,7 @@ class _AppStorePageState extends State<AppStorePage>
       if (mounted && generation == cache.requestGeneration) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('加载下一页失败：$error')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.loadMoreFailed)));
       }
     } finally {
       if (mounted && generation == cache.requestGeneration) {
@@ -262,6 +269,7 @@ class _AppStorePageState extends State<AppStorePage>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Column(
       children: [
         Material(
@@ -278,7 +286,7 @@ class _AppStorePageState extends State<AppStorePage>
                   ),
                   elevation: const WidgetStatePropertyAll(0),
                   shadowColor: const WidgetStatePropertyAll(Colors.transparent),
-                  hintText: '搜索软件或游戏',
+                  hintText: l10n.searchAppsHint,
                   leading: const Icon(Icons.search),
                   readOnly: true,
                   onTap: () => unawaited(_openSearch()),
@@ -288,7 +296,7 @@ class _AppStorePageState extends State<AppStorePage>
                   controller: _tabController,
                   tabs: [
                     for (final section in _StoreSection.values)
-                      Tab(text: section.label),
+                      Tab(text: section.localizedLabel(l10n)),
                   ],
                   onTap: _selectSection,
                 ),
@@ -334,7 +342,7 @@ class _AppStorePageState extends State<AppStorePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              '加载应用商店失败\n${cache.error}',
+              context.l10n.appStoreLoadFailed,
               textAlign: TextAlign.center,
             ),
           ),
@@ -343,7 +351,7 @@ class _AppStorePageState extends State<AppStorePage>
             child: FilledButton.icon(
               onPressed: () => unawaited(_reloadSection(index)),
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(context.l10n.retry),
             ),
           ),
         ],
@@ -351,11 +359,11 @@ class _AppStorePageState extends State<AppStorePage>
     }
     if (cache.apps.isEmpty) {
       return ListView(
-        children: const [
-          SizedBox(height: 160),
-          Icon(Icons.apps_outage, size: 48),
-          SizedBox(height: 16),
-          Center(child: Text('暂无内容')),
+        children: [
+          const SizedBox(height: 160),
+          const Icon(Icons.apps_outage, size: 48),
+          const SizedBox(height: 16),
+          Center(child: Text(context.l10n.emptyStore)),
         ],
       );
     }
@@ -386,9 +394,9 @@ class _AppStorePageState extends State<AppStorePage>
       );
     }
     if (!cache.hasMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 18),
-        child: Center(child: Text('已经到底了')),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Center(child: Text(context.l10n.storeEndReached)),
       );
     }
     return const SizedBox(height: 12);

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SkyEngine</string>
+    <string name="update_download_invalid_arguments">Invalid update download parameters</string>
+    <string name="try_again_later">Try again later</string>
+    <string name="update_package_directory_invalid">Invalid update package directory</string>
+    <string name="update_package_directory_create_failed">Unable to create the update package directory</string>
+    <string name="download_failed_http">Download failed (HTTP %1$d)</string>
+    <string name="update_package_incomplete">The downloaded update package is incomplete</string>
+    <string name="update_package_checksum_failed">Update package verification failed</string>
+    <string name="update_package_replace_failed">Unable to replace the old update package</string>
+    <string name="update_package_save_failed">Unable to save the update package</string>
+    <string name="download_redirect_invalid">Invalid download redirect (HTTP %1$d)</string>
+    <string name="download_redirect_too_many">Too many download redirects</string>
+    <string name="download_progress">%1$d%% (%2$s / %3$s)</string>
+    <string name="downloaded_bytes">Downloaded %1$s</string>
+    <string name="update_downloading">Downloading update</string>
+    <string name="update_download_complete">Update download complete</string>
+    <string name="tap_to_install">Tap to install %1$s</string>
+    <string name="update_download_failed">Update download failed</string>
+    <string name="app_update_channel_name">App updates</string>
+    <string name="app_update_channel_description">Shows app update download progress</string>
+    <string name="update_already_downloading">An update is already downloading</string>
+    <string name="background_download_start_failed">Unable to start the background download</string>
+    <string name="install_unknown_apps_permission">Allow installation from this source; installation will continue when you return</string>
+    <string name="notification_permission_disabled">Notification permission is off, so download progress will not appear in notifications</string>
+    <string name="system_notifications_disabled">System notifications are off, so download progress will not appear in notifications</string>
+    <string name="update_notifications_disabled">App update notifications are off, so download progress will not appear in notifications</string>
+    <string name="notifications_unavailable">Notifications are unavailable, so download progress will not appear in notifications</string>
+</resources>
