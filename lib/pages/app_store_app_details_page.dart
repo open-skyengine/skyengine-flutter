@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../models/mrp_resolution.dart';
 import '../services/app_store_api.dart';
 import '../widgets/app_store_app_tile.dart';
@@ -81,9 +83,9 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
   Future<void> _downloadAndRun() async {
     final directory = widget.mrpDir;
     if (directory == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('MRP 目录还没有准备好')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.mrpDirectoryNotReady)),
+      );
       return;
     }
     if (_downloading) {
@@ -120,7 +122,9 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            downloaded.alreadyDownloaded ? '已下载，正在打开' : '下载完成，正在打开',
+            downloaded.alreadyDownloaded
+                ? context.l10n.downloadedOpening
+                : context.l10n.downloadCompleteOpening,
           ),
         ),
       );
@@ -129,7 +133,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('下载失败：$error')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.downloadFailed)));
       }
     } finally {
       if (mounted) {
@@ -144,6 +148,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
+    final l10n = context.l10n;
     final displayName = app.name.isEmpty ? app.internalName : app.name;
     return Scaffold(
       appBar: AppBar(title: Text(displayName)),
@@ -166,9 +171,9 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 4),
-                      Text(app.manufacturer?.name ?? '未知厂商'),
+                      Text(app.manufacturer?.name ?? l10n.unknownManufacturer),
                       const SizedBox(height: 8),
-                      Text(_typeLabel(app.type)),
+                      Text(_typeLabel(app.type, l10n)),
                     ],
                   ),
                 ),
@@ -176,17 +181,17 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
             ),
           ),
           const Divider(height: 1),
-          _detailRow('APP ID', '${app.appId}'),
+          _detailRow(l10n.appId, '${app.appId}'),
           if (app.createdAt != null)
-            _detailRow('发布时间', _formatDateTime(app.createdAt!)),
+            _detailRow(l10n.releaseDate, _formatDateTime(app.createdAt!)),
           if (app.description.trim().isNotEmpty)
-            _detailRow('应用介绍', app.description.trim()),
+            _detailRow(l10n.appIntroduction, app.description.trim()),
           const SizedBox(height: 20),
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             child: Text(
-              '版本与分辨率',
+              l10n.versionAndResolution,
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -203,7 +208,9 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.play_arrow),
-              label: Text(_downloading ? _downloadLabel() : '下载并运行'),
+              label: Text(
+                _downloading ? _downloadLabel() : l10n.downloadAndRun,
+              ),
             ),
           ),
         ],
@@ -223,21 +230,21 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Column(
           children: [
-            Text('版本加载失败：$_error'),
+            Text(context.l10n.versionLoadFailed),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _loadVersions,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(context.l10n.retry),
             ),
           ],
         ),
       );
     }
     if (_versions.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Text('暂无可用版本'),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Text(context.l10n.noVersionsAvailable),
       );
     }
 
@@ -249,11 +256,17 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '最新版本 ${latest.version.isEmpty ? latest.versionCode : latest.version}',
+            context.l10n.latestVersion(
+              latest.version.isEmpty
+                  ? latest.versionCode.toString()
+                  : latest.version,
+            ),
           ),
           if (latest.publishedAt != null) ...[
             const SizedBox(height: 4),
-            Text('发布于 ${_formatDateTime(latest.publishedAt!)}'),
+            Text(
+              context.l10n.publishedAt(_formatDateTime(latest.publishedAt!)),
+            ),
           ],
           if (latest.changelog.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -297,7 +310,9 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
 
   String _downloadLabel() {
     final progress = _downloadProgress;
-    return progress == null ? '正在下载' : '正在下载 ${(progress * 100).floor()}%';
+    return progress == null
+        ? context.l10n.downloading
+        : context.l10n.downloadingProgress((progress * 100).floor());
   }
 }
 
@@ -314,11 +329,11 @@ List<String> _packageResolutions(List<AppStoreVersion> versions) {
   return values.toList();
 }
 
-String _typeLabel(String type) {
+String _typeLabel(String type, AppLocalizations l10n) {
   return switch (type) {
-    'game' => '游戏',
-    'software' => '软件',
-    _ => '应用',
+    'game' => l10n.game,
+    'software' => l10n.software,
+    _ => l10n.app,
   };
 }
 

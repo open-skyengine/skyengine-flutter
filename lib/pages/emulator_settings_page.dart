@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/emulator_settings.dart';
 
 class EmulatorSettingsPage extends StatefulWidget {
@@ -42,16 +43,17 @@ class _EmulatorSettingsPageState extends State<EmulatorSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('模拟器设置')),
+      appBar: AppBar(title: Text(l10n.emulatorSettings)),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
                 ListTile(
                   leading: const Icon(Icons.memory),
-                  title: const Text('内存大小'),
-                  subtitle: const Text('应用可见内存，下次启动应用时生效'),
+                  title: Text(l10n.memorySize),
+                  subtitle: Text(l10n.memorySizeDescription),
                   trailing: DropdownButton<int>(
                     value: _settings.memoryMb,
                     isDense: true,

@@ -67,7 +67,7 @@ class MainActivity : FlutterActivity() {
             } else {
                 result.error(
                     ERROR_UPDATE_DOWNLOAD_FAILED,
-                    error ?: "后台下载失败",
+                    error ?: getString(R.string.update_download_failed),
                     null,
                 )
             }
@@ -290,7 +290,7 @@ class MainActivity : FlutterActivity() {
                         if (pendingUpdateDownloadResult != null) {
                             result.error(
                                 ERROR_UPDATE_DOWNLOAD_IN_PROGRESS,
-                                "已有更新正在下载",
+                                getString(R.string.update_already_downloading),
                                 null,
                             )
                             return@setMethodCallHandler
@@ -317,7 +317,8 @@ class MainActivity : FlutterActivity() {
                         } catch (error: Exception) {
                             pendingUpdateDownloadResult = null
                             showUpdateDownloadFailed(
-                                error.message ?: "后台下载无法启动",
+                                error.message
+                                    ?: getString(R.string.background_download_start_failed),
                             )
                             result.error(
                                 ERROR_UPDATE_DOWNLOAD_FAILED,
@@ -696,7 +697,7 @@ class MainActivity : FlutterActivity() {
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             throw InstallPermissionRequiredException(
-                "请允许安装未知来源应用，返回后会自动继续安装",
+                getString(R.string.install_unknown_apps_permission),
             )
         }
 
@@ -737,12 +738,17 @@ class MainActivity : FlutterActivity() {
             0
         }
         val text = if (hasTotal) {
-            "$progress%（${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}）"
+            getString(
+                R.string.download_progress,
+                progress,
+                formatBytes(downloadedBytes),
+                formatBytes(totalBytes),
+            )
         } else {
-            "已下载 ${formatBytes(downloadedBytes)}"
+            getString(R.string.downloaded_bytes, formatBytes(downloadedBytes))
         }
         val notification = updateNotificationBuilder()
-            .setContentTitle("正在下载更新")
+            .setContentTitle(getString(R.string.update_downloading))
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -758,7 +764,7 @@ class MainActivity : FlutterActivity() {
         }
         ensureUpdateNotificationChannel()
         val notification = updateNotificationBuilder()
-            .setContentTitle("更新下载完成")
+            .setContentTitle(getString(R.string.update_download_complete))
             .setContentText(apk.name)
             .setOngoing(false)
             .setOnlyAlertOnce(false)
@@ -774,9 +780,9 @@ class MainActivity : FlutterActivity() {
             return
         }
         ensureUpdateNotificationChannel()
-        val text = message.ifBlank { "请稍后重试" }
+        val text = message.ifBlank { getString(R.string.try_again_later) }
         val notification = updateNotificationBuilder()
-            .setContentTitle("更新下载失败")
+            .setContentTitle(getString(R.string.update_download_failed))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(false)
@@ -805,15 +811,12 @@ class MainActivity : FlutterActivity() {
             return
         }
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(UPDATE_NOTIFICATION_CHANNEL_ID) != null) {
-            return
-        }
         val channel = NotificationChannel(
             UPDATE_NOTIFICATION_CHANNEL_ID,
-            "应用更新",
+            getString(R.string.app_update_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "显示应用更新下载进度"
+            description = getString(R.string.app_update_channel_description)
         }
         manager.createNotificationChannel(channel)
     }
@@ -850,13 +853,13 @@ class MainActivity : FlutterActivity() {
 
         val message = when {
             !hasNotificationPermission() ->
-                "通知权限未开启，下载进度不会显示在通知栏"
+                getString(R.string.notification_permission_disabled)
             !NotificationManagerCompat.from(this).areNotificationsEnabled() ->
-                "系统通知已关闭，下载进度不会显示在通知栏"
+                getString(R.string.system_notifications_disabled)
             isUpdateNotificationChannelBlocked() ->
-                "应用更新通知已关闭，下载进度不会显示在通知栏"
+                getString(R.string.update_notifications_disabled)
             else ->
-                "通知不可用，下载进度不会显示在通知栏"
+                getString(R.string.notifications_unavailable)
         }
 
         return mapOf(

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
 import '../models/keypad_mode.dart';
 import '../models/mrp_resolution.dart';
 import '../platform/android_app_update.dart';
@@ -335,13 +336,15 @@ class _HomePageState extends State<HomePage> {
       }
       if (result.status == EmulatorUpdateCheckStatus.unsupported) {
         if (showResult) {
-          _showUpdateCheckMessage('当前平台暂不支持应用内更新');
+          _showUpdateCheckMessage(
+            context.l10n.currentPlatformUpdateUnsupported,
+          );
         }
         return;
       }
       if (result.status == EmulatorUpdateCheckStatus.upToDate) {
         if (mounted && showResult) {
-          _showUpdateCheckMessage('已是最新版本');
+          _showUpdateCheckMessage(context.l10n.upToDate);
         }
         return;
       }
@@ -352,7 +355,7 @@ class _HomePageState extends State<HomePage> {
       debugPrintStack(stackTrace: stackTrace);
       debugPrint('Failed to check app update: $error');
       if (mounted && showResult) {
-        _showUpdateCheckMessage('检查更新失败，请稍后重试');
+        _showUpdateCheckMessage(context.l10n.updateCheckFailed);
       }
     } finally {
       if (mounted) {
@@ -377,26 +380,28 @@ class _HomePageState extends State<HomePage> {
       barrierDismissible: !forceUpdate,
       builder: (context) {
         final title = version.version.isEmpty
-            ? '发现新版本'
-            : '发现新版本 ${version.version}';
+            ? context.l10n.newVersionAvailable
+            : context.l10n.newVersionAvailableWithVersion(version.version);
         return PopScope(
           canPop: !forceUpdate,
           child: AlertDialog(
             title: Text(title),
             content: SingleChildScrollView(
               child: Text(
-                version.changelog.isEmpty ? '是否下载并安装更新？' : version.changelog,
+                version.changelog.isEmpty
+                    ? context.l10n.updateDownloadPrompt
+                    : version.changelog,
               ),
             ),
             actions: [
               if (!forceUpdate)
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('稍后'),
+                  child: Text(context.l10n.updateLater),
                 ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('更新'),
+                child: Text(context.l10n.update),
               ),
             ],
           ),
@@ -416,6 +421,7 @@ class _HomePageState extends State<HomePage> {
     if (workDir == null || _downloadingUpdate) {
       return;
     }
+    final updateFailedMessage = context.l10n.updateFailed;
     var canShowDownloadNotification = false;
     var downloadStarted = false;
     var backgroundDownloadStarted = false;
@@ -472,7 +478,7 @@ class _HomePageState extends State<HomePage> {
             return;
           }
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error.message ?? '允许后会自动继续安装')),
+            SnackBar(content: Text(context.l10n.allowInstallThenContinue)),
           );
           return;
         }
@@ -483,17 +489,17 @@ class _HomePageState extends State<HomePage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已打开安装程序')));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.installerOpened)));
     } catch (e) {
       if (canShowDownloadNotification && !backgroundDownloadStarted) {
-        await _androidAppUpdate.showDownloadFailed(e.toString());
+        await _androidAppUpdate.showDownloadFailed(updateFailedMessage);
       }
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('更新失败：$e')));
+      ).showSnackBar(SnackBar(content: Text(updateFailedMessage)));
       if (version.forceUpdate) {
         unawaited(_showAppUpdateDialog(version));
       }
@@ -560,18 +566,18 @@ class _HomePageState extends State<HomePage> {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          title: const Text('开启通知'),
+          title: Text(context.l10n.enableNotifications),
           content: Text(_downloadNotificationMessage(status)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: status.canOpenSettings
                   ? () => Navigator.of(context).pop(true)
                   : null,
-              child: const Text('去开启'),
+              child: Text(context.l10n.goToNotificationSettings),
             ),
           ],
         );
@@ -596,7 +602,9 @@ class _HomePageState extends State<HomePage> {
   String _downloadNotificationMessage(
     DownloadNotificationPermissionStatus status,
   ) {
-    return status.message.isEmpty ? '开启通知后，下载进度会显示在通知栏' : status.message;
+    return status.message.isEmpty
+        ? context.l10n.downloadNotificationDescription
+        : status.message;
   }
 
   @override
@@ -628,9 +636,9 @@ class _HomePageState extends State<HomePage> {
     final wasFollowingSystem = _themeSettings.followSystem;
     unawaited(_themeSettings.toggleTheme(Theme.of(context).brightness));
     if (wasFollowingSystem) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('切换成功，关闭了深色跟随系统')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.themeFollowSystemDisabled)),
+      );
     }
   }
 
@@ -640,16 +648,16 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('删除 $name？'),
-          content: const Text('将会同步删除文件！'),
+          title: Text(context.l10n.deleteFileQuestion(name)),
+          content: Text(context.l10n.deleteFileWarning),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              child: Text(context.l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确定'),
+              child: Text(context.l10n.confirm),
             ),
           ],
         );
@@ -673,7 +681,13 @@ class _HomePageState extends State<HomePage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(existed ? '已删除文件：$name' : '文件不存在，已从列表移除：$name')),
+        SnackBar(
+          content: Text(
+            existed
+                ? context.l10n.fileDeleted(name)
+                : context.l10n.fileNotFoundRemoved(name),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) {
@@ -681,7 +695,7 @@ class _HomePageState extends State<HomePage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('删除失败：$e')));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.deleteFailed)));
     }
   }
 
@@ -698,12 +712,12 @@ class _HomePageState extends State<HomePage> {
         globalPosition & const Size(1, 1),
         Offset.zero & overlay.size,
       ),
-      items: const [
+      items: [
         PopupMenuItem(
           value: _LocalMrpMenuAction.details,
           child: ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('查看详情'),
+            leading: const Icon(Icons.info_outline),
+            title: Text(context.l10n.details),
             contentPadding: EdgeInsets.zero,
           ),
         ),
@@ -733,28 +747,48 @@ class _HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _detailRow('文件名', file.fileName),
-                _detailRow('路径', file.path),
-                _detailRow('加入时间', _formatAddedAt(entry.addedAt)),
-                _detailRow('厂商', _emptyAsDash(metadata.vendor)),
-                _detailRow('版本号', metadata.version?.toString() ?? '-'),
-                _detailRow('包内文件名', _emptyAsDash(metadata.fileHeaderName)),
-                _detailRow('应用 ID', metadata.appId?.toString() ?? '-'),
+                _detailRow(context.l10n.fileName, file.fileName),
+                _detailRow(context.l10n.path, file.path),
                 _detailRow(
-                  '分辨率',
+                  context.l10n.joinedTime,
+                  _formatAddedAt(entry.addedAt),
+                ),
+                _detailRow(context.l10n.vendor, _emptyAsDash(metadata.vendor)),
+                _detailRow(
+                  context.l10n.versionNumber,
+                  metadata.version?.toString() ?? '-',
+                ),
+                _detailRow(
+                  context.l10n.fileHeaderName,
+                  _emptyAsDash(metadata.fileHeaderName),
+                ),
+                _detailRow(
+                  context.l10n.appId,
+                  metadata.appId?.toString() ?? '-',
+                ),
+                _detailRow(
+                  context.l10n.resolution,
                   metadata.screenWidth == null || metadata.screenHeight == null
                       ? '-'
                       : '${metadata.screenWidth} x ${metadata.screenHeight}',
                 ),
-                _detailRow('描述', _emptyAsDash(metadata.description)),
-                _detailRow('MRP 头', metadata.validHeader ? '有效' : '未识别'),
+                _detailRow(
+                  context.l10n.description,
+                  _emptyAsDash(metadata.description),
+                ),
+                _detailRow(
+                  context.l10n.mrpHeader,
+                  metadata.validHeader
+                      ? context.l10n.valid
+                      : context.l10n.notRecognized,
+                ),
               ],
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
+              child: Text(context.l10n.close),
             ),
           ],
         );
@@ -797,14 +831,14 @@ class _HomePageState extends State<HomePage> {
                 if (_selectedIndex == 0)
                   IconButton(
                     onPressed: _pickAndCopyMrp,
-                    tooltip: '导入 MRP 文件',
+                    tooltip: context.l10n.importMrpFile,
                     icon: const Icon(Icons.add),
                   ),
                 if (_selectedIndex == 2)
                   IconButton(
                     tooltip: Theme.of(context).brightness == Brightness.dark
-                        ? '切换到浅色模式'
-                        : '切换到深色模式',
+                        ? context.l10n.switchToLightMode
+                        : context.l10n.switchToDarkMode,
                     onPressed: () {
                       unawaited(_toggleTheme());
                     },
@@ -849,10 +883,19 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.folder), label: '本地'),
-          NavigationDestination(icon: Icon(Icons.storefront), label: '商店'),
-          NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.folder),
+            label: context.l10n.local,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.storefront),
+            label: context.l10n.store,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.settings),
+            label: context.l10n.settings,
+          ),
         ],
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);
@@ -866,7 +909,7 @@ class _HomePageState extends State<HomePage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_mrpFiles.isEmpty) {
-      return const Center(child: Text('没有 MRP 文件，点击右上角按钮导入'));
+      return Center(child: Text(context.l10n.noMrpFiles));
     }
 
     return ListView.builder(
@@ -894,19 +937,19 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  file.vendorAndVersion,
+                  _vendorAndVersion(file),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '加入时间 ${_formatAddedAt(entry.addedAt)}',
+                  context.l10n.joinedAt(_formatAddedAt(entry.addedAt)),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
             trailing: IconButton(
-              tooltip: '删除',
+              tooltip: context.l10n.delete,
               onPressed: () => _confirmRemoveMrp(file),
               icon: const Icon(Icons.delete_outline),
             ),
@@ -915,5 +958,14 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+
+  String _vendorAndVersion(LocalMrpFile file) {
+    final parts = [
+      if (file.metadata.vendor.isNotEmpty) file.metadata.vendor,
+      if (file.metadata.version != null)
+        context.l10n.versionLabel(file.metadata.version.toString()),
+    ];
+    return parts.isEmpty ? file.fileName : parts.join(' · ');
   }
 }

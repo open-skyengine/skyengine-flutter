@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n.dart';
 import 'changelog_page.dart';
 import 'debug_page.dart';
 
@@ -79,7 +80,7 @@ class _AboutPageState extends State<AboutPage> {
   void _showOpenUrlError() {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('无法打开 GitHub')));
+      ..showSnackBar(SnackBar(content: Text(context.l10n.openGitHubFailed)));
   }
 
   @override
@@ -97,23 +98,24 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildPage(bool checkingForUpdate) {
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('关于')),
+      appBar: AppBar(title: Text(l10n.about)),
       body: ListView(
         children: [
           ListTile(
             leading: const Icon(Icons.history),
-            title: const Text('当前版本'),
+            title: Text(l10n.currentVersion),
             subtitle: FutureBuilder<String>(
               future: _version,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  return Text('版本 ${snapshot.data}');
+                  return Text(l10n.versionLabel(snapshot.data!));
                 }
                 if (snapshot.hasError) {
-                  return const Text('版本信息不可用');
+                  return Text(l10n.versionInfoUnavailable);
                 }
-                return const Text('正在读取版本...');
+                return Text(l10n.versionReading);
               },
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -128,7 +130,7 @@ class _AboutPageState extends State<AboutPage> {
           ),
           ListTile(
             leading: const Icon(Icons.bug_report),
-            title: const Text('调试'),
+            title: Text(l10n.debug),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(
@@ -138,8 +140,8 @@ class _AboutPageState extends State<AboutPage> {
           ),
           ListTile(
             leading: const Icon(Icons.system_update_alt),
-            title: const Text('检查更新'),
-            subtitle: checkingForUpdate ? const Text('正在检查...') : null,
+            title: Text(l10n.checkForUpdates),
+            subtitle: checkingForUpdate ? Text(l10n.checkingForUpdates) : null,
             trailing: checkingForUpdate
                 ? const SizedBox.square(
                     dimension: 20,
@@ -183,7 +185,7 @@ class DebugToolsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('调试')),
+      appBar: AppBar(title: Text(context.l10n.debug)),
       body: const DebugPage(),
     );
   }

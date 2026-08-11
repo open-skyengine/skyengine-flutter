@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/theme_settings.dart';
 
 class DarkModeSettingsPage extends StatefulWidget {
@@ -35,15 +36,16 @@ class _DarkModeSettingsPageState extends State<DarkModeSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('深色设置')),
+      appBar: AppBar(title: Text(l10n.darkModeSettings)),
       body: !widget.settings.isLoaded
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
                 SwitchListTile(
                   secondary: const Icon(Icons.brightness_auto),
-                  title: const Text('深色跟随系统'),
+                  title: Text(l10n.darkModeFollowSystem),
                   value: widget.settings.followSystem,
                   onChanged: (value) {
                     unawaited(
@@ -57,7 +59,7 @@ class _DarkModeSettingsPageState extends State<DarkModeSettingsPage> {
                 if (!widget.settings.followSystem)
                   SwitchListTile(
                     secondary: const Icon(Icons.dark_mode),
-                    title: const Text('深色模式'),
+                    title: Text(l10n.darkMode),
                     value: widget.settings.darkMode,
                     onChanged: (value) {
                       unawaited(widget.settings.setDarkMode(value));

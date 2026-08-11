@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../services/app_store_api.dart';
 import '../services/search_history.dart';
 import '../widgets/app_store_app_tile.dart';
@@ -270,7 +272,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
       if (mounted && generation == _requestGeneration) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('加载下一页失败：$error')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.loadMoreFailed)));
       }
     } finally {
       if (mounted && generation == _requestGeneration) {
@@ -324,6 +326,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return PopScope(
       canPop: _submittedQuery.isEmpty,
       onPopInvokedWithResult: (didPop, result) {
@@ -335,7 +338,9 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
         appBar: AppBar(
           leading: IconButton(
             key: const ValueKey('close-app-store-search'),
-            tooltip: _submittedQuery.isEmpty ? '返回' : '返回搜索历史',
+            tooltip: _submittedQuery.isEmpty
+                ? l10n.back
+                : l10n.backToSearchHistory,
             onPressed: _submittedQuery.isEmpty
                 ? () => unawaited(Navigator.of(context).maybePop())
                 : _returnToHistory,
@@ -359,7 +364,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
                       Colors.transparent,
                     ),
                     textInputAction: TextInputAction.search,
-                    hintText: '搜索软件或游戏',
+                    hintText: l10n.searchAppsHint,
                     leading: const Icon(Icons.search),
                     onChanged: (value) {
                       if (value.trim().isEmpty && _submittedQuery.isNotEmpty) {
@@ -380,7 +385,7 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
                 TextButton(
                   key: const ValueKey('submit-app-store-search'),
                   onPressed: () => unawaited(_submitSearch()),
-                  child: const Text('搜索'),
+                  child: Text(l10n.search),
                 ),
               ],
             ),
@@ -437,16 +442,22 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
 
   Widget _buildFilterBar() {
     final canExpand = _filterGroups.isNotEmpty;
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(left: 12, right: 4),
       child: Row(
         children: [
           Expanded(
-            child: Text('搜索结果', style: Theme.of(context).textTheme.titleSmall),
+            child: Text(
+              l10n.searchResults,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
           ),
           IconButton(
             key: const ValueKey('toggle-search-filters'),
-            tooltip: _filtersExpanded ? '收起筛选' : '展开筛选',
+            tooltip: _filtersExpanded
+                ? l10n.collapseFilters
+                : l10n.expandFilters,
             onPressed: canExpand
                 ? () => setState(() => _filtersExpanded = !_filtersExpanded)
                 : null,
@@ -479,10 +490,11 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
 
   Widget _buildFilterGroup(AppStoreSearchConfigGroup group) {
     final key = _filterKey(group);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(group.name),
+        Text(_localizedFilterGroupName(group, l10n)),
         const SizedBox(height: 6),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -492,7 +504,11 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
                 ChoiceChip(
                   key: index == 0 ? ValueKey(key) : null,
                   label: Text(
-                    group.options[index].name,
+                    _localizedFilterOptionName(
+                      group,
+                      group.options[index],
+                      l10n,
+                    ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   selected:
@@ -529,21 +545,21 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text('搜索失败\n$_error', textAlign: TextAlign.center),
+            child: Text(context.l10n.searchFailed, textAlign: TextAlign.center),
           ),
           const SizedBox(height: 12),
           Center(
             child: OutlinedButton.icon(
               onPressed: _reloadResults,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(context.l10n.retry),
             ),
           ),
         ],
       );
     }
     if (_apps.isEmpty) {
-      return const Center(child: Text('没有找到相关应用或游戏'));
+      return Center(child: Text(context.l10n.noSearchResults));
     }
     return RefreshIndicator(
       onRefresh: _reloadResults,
@@ -577,10 +593,10 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
     return ListView(
       children: [
         ListTile(
-          title: const Text('搜索历史'),
+          title: Text(context.l10n.searchHistory),
           trailing: IconButton(
             key: const ValueKey('clear-search-history'),
-            tooltip: '清除搜索历史',
+            tooltip: context.l10n.clearSearchHistory,
             onPressed: _clearHistory,
             icon: const Icon(Icons.delete_outline),
           ),
@@ -603,11 +619,40 @@ class _AppStoreSearchPageState extends State<AppStoreSearchPage> {
       );
     }
     if (!_hasMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: Text('已经到底了')),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: Text(context.l10n.storeEndReached)),
       );
     }
     return const SizedBox(height: 12);
   }
+}
+
+String _localizedFilterGroupName(
+  AppStoreSearchConfigGroup group,
+  AppLocalizations l10n,
+) {
+  return switch (group.queryKey) {
+    'type' => l10n.appType,
+    'resolution' => l10n.resolution,
+    'order' => l10n.sort,
+    _ => group.name,
+  };
+}
+
+String _localizedFilterOptionName(
+  AppStoreSearchConfigGroup group,
+  AppStoreSearchConfigOption option,
+  AppLocalizations l10n,
+) {
+  if (option.value == 'default') {
+    return group.queryKey == 'order' ? l10n.defaultSort : l10n.all;
+  }
+  return switch ((group.queryKey, option.value)) {
+    ('type', 'software') => l10n.software,
+    ('type', 'game') => l10n.game,
+    ('order', 'latest') => l10n.newest,
+    ('order', 'download') => l10n.mostDownloaded,
+    _ => option.name,
+  };
 }

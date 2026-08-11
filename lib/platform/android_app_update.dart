@@ -89,7 +89,7 @@ class AndroidAppUpdate {
     if (path is! String || path.isEmpty) {
       throw PlatformException(
         code: 'UPDATE_DOWNLOAD_FAILED',
-        message: '后台下载未返回更新包路径',
+        message: 'Background download did not return an update package path',
       );
     }
     return path;

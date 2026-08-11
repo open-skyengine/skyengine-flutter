@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/theme_settings.dart';
 import 'about_page.dart';
 import 'changelog_page.dart';
@@ -31,11 +32,12 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return ListView(
       children: [
         ListTile(
           leading: const Icon(Icons.settings),
-          title: const Text('模拟器设置'),
+          title: Text(l10n.emulatorSettings),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.of(context).push(
@@ -45,7 +47,7 @@ class SettingsPage extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.dark_mode),
-          title: const Text('深色设置'),
+          title: Text(l10n.darkModeSettings),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.of(context).push(
@@ -59,7 +61,7 @@ class SettingsPage extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.info_outline),
-          title: const Text('关于'),
+          title: Text(l10n.about),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.of(context).push(
