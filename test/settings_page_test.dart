@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/pages/more_page.dart';
+import 'package:skyengine/pages/settings_page.dart';
 
 void main() {
   testWidgets('about page contains update and debug options', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: MorePage(versionLoader: () async => '1.0.1 (4)')),
+        home: Scaffold(
+          body: SettingsPage(versionLoader: () async => '1.0.1 (4)'),
+        ),
       ),
     );
 
@@ -40,7 +42,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MorePage(
+          body: SettingsPage(
             onCheckForUpdate: () async {
               checks += 1;
             },
@@ -61,7 +63,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MorePage(
+          body: SettingsPage(
             versionLoader: () async => '1.0.1 (4)',
             changelogLoader: () async => '## v1.0.1\n\n- 修复示例问题',
           ),
@@ -86,7 +88,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MorePage(
+          body: SettingsPage(
             checkingForUpdate: true,
             onCheckForUpdate: () async {
               checks += 1;
@@ -113,7 +115,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MorePage(
+          body: SettingsPage(
             versionLoader: () async => '1.0.1 (4)',
             externalUrlLauncher: (uri) async {
               openedUri = uri;

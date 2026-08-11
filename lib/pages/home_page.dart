@@ -14,7 +14,7 @@ import '../services/emulator_update_checker.dart';
 import '../services/local_mrp_database.dart';
 import '../services/local_mrp_files.dart';
 import '../services/theme_settings.dart';
-import 'more_page.dart';
+import 'settings_page.dart';
 
 typedef AppStoreRunMrp = void Function(String path, {String? resolution});
 
@@ -839,7 +839,7 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
-          MorePage(
+          SettingsPage(
             themeSettings: _themeSettings,
             checkingForUpdate: _checkingUpdate,
             checkingForUpdateListenable: _checkingUpdateNotifier,
@@ -852,7 +852,7 @@ class _HomePageState extends State<HomePage> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.folder), label: '本地'),
           NavigationDestination(icon: Icon(Icons.storefront), label: '商店'),
-          NavigationDestination(icon: Icon(Icons.more_horiz), label: '更多'),
+          NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
         ],
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);

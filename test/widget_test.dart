@@ -13,7 +13,9 @@ import 'package:skyengine/pages/mrp_player_page.dart';
 void main() {
   setUpAll(sqfliteFfiInit);
 
-  testWidgets('Home shows local and store tabs', (WidgetTester tester) async {
+  testWidgets('Home shows local, store, and settings tabs', (
+    WidgetTester tester,
+  ) async {
     final tempDir = await tester.runAsync(
       () => Directory.systemTemp.createTemp('skyengine_home_page_test_'),
     );
@@ -52,7 +54,7 @@ void main() {
       expect(find.text('SkyEngine'), findsOneWidget);
       expect(find.text('本地'), findsOneWidget);
       expect(find.text('商店'), findsOneWidget);
-      expect(find.text('更多'), findsOneWidget);
+      expect(find.text('设置'), findsOneWidget);
       expect(find.byTooltip('导入 MRP 文件'), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsNothing);
 
@@ -63,7 +65,7 @@ void main() {
       expect(find.text('搜索应用'), findsOneWidget);
       expect(find.byTooltip('导入 MRP 文件'), findsNothing);
 
-      await tester.tap(find.text('更多'));
+      await tester.tap(find.text('设置'));
       await tester.pump();
 
       expect(find.text('SkyEngine'), findsOneWidget);

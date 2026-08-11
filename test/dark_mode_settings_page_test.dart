@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skyengine/pages/more_page.dart';
+import 'package:skyengine/pages/settings_page.dart';
 import 'package:skyengine/services/theme_settings.dart';
 
 void main() {
@@ -11,7 +11,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: MorePage(themeSettings: settings)),
+        home: Scaffold(body: SettingsPage(themeSettings: settings)),
       ),
     );
 
