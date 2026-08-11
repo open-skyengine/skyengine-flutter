@@ -9,7 +9,7 @@ import 'emulator_settings_page.dart';
 
 export 'about_page.dart';
 
-class MorePage extends StatelessWidget {
+class SettingsPage extends StatelessWidget {
   final ThemeSettings? themeSettings;
   final Future<void> Function()? onCheckForUpdate;
   final bool checkingForUpdate;
@@ -18,7 +18,7 @@ class MorePage extends StatelessWidget {
   final ChangelogLoader? changelogLoader;
   final ExternalUrlLauncher? externalUrlLauncher;
 
-  const MorePage({
+  const SettingsPage({
     super.key,
     this.themeSettings,
     this.onCheckForUpdate,
