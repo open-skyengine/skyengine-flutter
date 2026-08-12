@@ -1,6 +1,9 @@
 param(
   [switch]$Clean,
-  [string]$SymbolDir = "build\symbols\android-split-arm"
+  [string]$SymbolDir = "build\symbols\android-split-arm",
+  [string]$AppStoreBaseUrl = $env:APP_STORE_BASE_URL,
+  [string]$AppStoreAppId = $env:APP_STORE_APP_ID,
+  [string]$AppStoreAppSecret = $env:APP_STORE_APP_SECRET
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +18,18 @@ try {
     }
   }
 
+  # 未提供时沿用 app_store_api.dart 内置的开发凭据。
+  $dartDefines = @()
+  if ($AppStoreBaseUrl) {
+    $dartDefines += "--dart-define=APP_STORE_BASE_URL=$AppStoreBaseUrl"
+  }
+  if ($AppStoreAppId) {
+    $dartDefines += "--dart-define=APP_STORE_APP_ID=$AppStoreAppId"
+  }
+  if ($AppStoreAppSecret) {
+    $dartDefines += "--dart-define=APP_STORE_APP_SECRET=$AppStoreAppSecret"
+  }
+
   $outputDir = "build\app\outputs\flutter-apk"
   $targets = @(
     @{ Platform = "android-arm64"; Abi = "arm64-v8a" },
@@ -25,7 +40,8 @@ try {
     flutter build apk `
       --release `
       --target-platform $target.Platform `
-      --split-debug-info="$SymbolDir"
+      --split-debug-info="$SymbolDir" `
+      @dartDefines
     if ($LASTEXITCODE -ne 0) {
       throw "Flutter build failed for $($target.Abi) with exit code $LASTEXITCODE"
     }

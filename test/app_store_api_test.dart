@@ -7,6 +7,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:skyengine/services/app_store_api.dart';
 
 void main() {
+  test('app store credentials fall back to development defaults', () {
+    // 未通过 --dart-define 注入时使用仓库内置的开发凭据。
+    const config = AppStoreApiConfig();
+    expect(config.appId, kDefaultAppStoreAppId);
+    expect(config.secret, kDefaultAppStoreSecret);
+    expect(config.baseUrl, kDefaultAppStoreBaseUrl);
+    expect(config.usesDevelopmentCredentials, isTrue);
+  });
+
+  test('explicit credentials override the compiled-in defaults', () {
+    const config = AppStoreApiConfig(
+      baseUrl: 'https://store.example.com/api/app/v1',
+      appId: 'prod-app-id',
+      secret: 'prod-app-secret',
+    );
+    expect(config.appId, 'prod-app-id');
+    expect(config.secret, 'prod-app-secret');
+    expect(config.baseUri.host, 'store.example.com');
+    expect(config.baseUri.path, '/api/app/v1');
+    expect(config.usesDevelopmentCredentials, isFalse);
+  });
+
   test('maps Android runtime ABIs to emulator package architectures', () {
     expect(
       emulatorArchitectureForAbi(Abi.androidArm64),
@@ -70,7 +92,7 @@ void main() {
     final client = AppStoreClient(
       AppStoreApiConfig(
         baseUrl: 'http://${server.address.host}:${server.port}/api/app/v1',
-        key: 'dev-app-key',
+        appId: 'dev-app-key',
         secret: 'dev-app-secret-change-me',
       ),
     );
@@ -207,7 +229,7 @@ void main() {
       final client = AppStoreClient(
         AppStoreApiConfig(
           baseUrl: 'http://${server.address.host}:${server.port}/api/app/v1',
-          key: 'dev-app-key',
+          appId: 'dev-app-key',
           secret: 'dev-app-secret-change-me',
         ),
       );
