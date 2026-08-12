@@ -6,9 +6,31 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-const String kDefaultAppStoreBaseUrl = 'https://mrp.jysafe.cn/api/app/v1';
-const String kDefaultAppStoreKey = 'dev-app-key';
-const String kDefaultAppStoreSecret = 'dev-app-secret-change-me';
+/// 商店接口地址与应用身份凭据。
+///
+/// 三个值都可以在构建时通过 `--dart-define` 覆盖，供 CI 注入生产配置：
+///
+/// ```sh
+/// flutter build apk --release \
+///   --dart-define=APP_STORE_BASE_URL=https://example.com/api/app/v1 \
+///   --dart-define=APP_STORE_APP_ID=prod-app-id \
+///   --dart-define=APP_STORE_APP_SECRET=prod-app-secret
+/// ```
+///
+/// 未注入时回落到开发环境默认值，本地开发与测试无需额外参数。
+/// 参见 docs/app-api.md 第 2 节（签名规则）与第 6 节（配置项）。
+const String kDefaultAppStoreBaseUrl = String.fromEnvironment(
+  'APP_STORE_BASE_URL',
+  defaultValue: 'https://mrp.jysafe.cn/api/app/v1',
+);
+const String kDefaultAppStoreAppId = String.fromEnvironment(
+  'APP_STORE_APP_ID',
+  defaultValue: 'dev-app-key',
+);
+const String kDefaultAppStoreSecret = String.fromEnvironment(
+  'APP_STORE_APP_SECRET',
+  defaultValue: 'dev-app-secret-change-me',
+);
 const String kEmulatorArchitectureUniversal = 'universal';
 const String kEmulatorArchitectureArm64 = 'arm64-v8a';
 const String kEmulatorArchitectureArm = 'armeabi-v7a';
@@ -32,14 +54,23 @@ typedef DownloadProgressCallback =
 
 class AppStoreApiConfig {
   final String baseUrl;
-  final String key;
+
+  /// 对应请求头 `X-App-Key`，即管理端配置的 App ID。
+  final String appId;
+
+  /// 对应服务端 `app_api.secret`，仅用于本地计算 HMAC 签名，不随请求发送。
   final String secret;
 
   const AppStoreApiConfig({
     this.baseUrl = kDefaultAppStoreBaseUrl,
-    this.key = kDefaultAppStoreKey,
+    this.appId = kDefaultAppStoreAppId,
     this.secret = kDefaultAppStoreSecret,
   });
+
+  /// 是否仍在使用仓库内置的开发凭据。release 构建下为 `true` 说明 CI
+  /// 没有注入 `APP_STORE_APP_ID` / `APP_STORE_APP_SECRET`。
+  bool get usesDevelopmentCredentials =>
+      appId == 'dev-app-key' || secret == 'dev-app-secret-change-me';
 
   Uri get baseUri {
     final uri = Uri.parse(baseUrl.trim());
@@ -1109,7 +1140,10 @@ class AppStoreClient {
     final nonce = _createNonce();
     return {
       HttpHeaders.acceptHeader: 'application/json',
-      'X-App-Key': config.key,
+      // 服务端实际校验的是 X-App-Key（docs/app-api.md 第 2.1 节写的是
+      // X-App-ID，与线上实现不一致，此处以服务端为准）。
+      'X-App-ID': config.appId,
+      'X-App-Key': config.appId,
       'X-App-Timestamp': timestamp,
       'X-App-Nonce': nonce,
       'X-App-Signature': _signature(

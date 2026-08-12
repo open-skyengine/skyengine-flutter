@@ -75,14 +75,33 @@ jobs:
             echo "keyPassword=$ANDROID_KEY_PASSWORD"
           } > android/key.properties
 
+      - name: Verify app store credentials
+        env:
+          APP_STORE_APP_ID: ${{ secrets.APP_STORE_APP_ID }}
+          APP_STORE_APP_SECRET: ${{ secrets.APP_STORE_APP_SECRET }}
+        run: |
+          test -n "$APP_STORE_APP_ID"
+          test -n "$APP_STORE_APP_SECRET"
+
       - name: Build and prepare release APKs
+        env:
+          APP_STORE_BASE_URL: ${{ secrets.APP_STORE_BASE_URL }}
+          APP_STORE_APP_ID: ${{ secrets.APP_STORE_APP_ID }}
+          APP_STORE_APP_SECRET: ${{ secrets.APP_STORE_APP_SECRET }}
         run: |
           mkdir -p dist
-          flutter build apk --release --target-platform android-arm,android-arm64 --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
+          DART_DEFINES=(
+            "--dart-define=APP_STORE_APP_ID=$APP_STORE_APP_ID"
+            "--dart-define=APP_STORE_APP_SECRET=$APP_STORE_APP_SECRET"
+          )
+          if [ -n "$APP_STORE_BASE_URL" ]; then
+            DART_DEFINES+=("--dart-define=APP_STORE_BASE_URL=$APP_STORE_BASE_URL")
+          fi
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm,android-arm64 --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-continuous.apk
-          flutter build apk --release --target-platform android-arm64 --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm64 --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-continuous-arm64-v8a.apk
-          flutter build apk --release --target-platform android-arm --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-continuous-armeabi-v7a.apk
 
       - name: Move continuous tag
@@ -152,14 +171,33 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "name=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Verify app store credentials
+        env:
+          APP_STORE_APP_ID: ${{ secrets.APP_STORE_APP_ID }}
+          APP_STORE_APP_SECRET: ${{ secrets.APP_STORE_APP_SECRET }}
+        run: |
+          test -n "$APP_STORE_APP_ID"
+          test -n "$APP_STORE_APP_SECRET"
+
       - name: Build and prepare release APKs
+        env:
+          APP_STORE_BASE_URL: ${{ secrets.APP_STORE_BASE_URL }}
+          APP_STORE_APP_ID: ${{ secrets.APP_STORE_APP_ID }}
+          APP_STORE_APP_SECRET: ${{ secrets.APP_STORE_APP_SECRET }}
         run: |
           mkdir -p dist
-          flutter build apk --release --target-platform android-arm,android-arm64 --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
+          DART_DEFINES=(
+            "--dart-define=APP_STORE_APP_ID=$APP_STORE_APP_ID"
+            "--dart-define=APP_STORE_APP_SECRET=$APP_STORE_APP_SECRET"
+          )
+          if [ -n "$APP_STORE_BASE_URL" ]; then
+            DART_DEFINES+=("--dart-define=APP_STORE_BASE_URL=$APP_STORE_BASE_URL")
+          fi
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm,android-arm64 --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk "dist/skyengine-${GITHUB_REF_NAME}.apk"
-          flutter build apk --release --target-platform android-arm64 --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm64 --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk "dist/skyengine-${GITHUB_REF_NAME}-arm64-v8a.apk"
-          flutter build apk --release --target-platform android-arm --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
+          flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk "dist/skyengine-${GITHUB_REF_NAME}-armeabi-v7a.apk"
 
       - name: Publish GitHub release
