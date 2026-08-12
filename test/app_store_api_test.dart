@@ -78,6 +78,7 @@ void main() {
     try {
       final list = await client.fetchApps(page: 1, pageSize: 1);
       expect(list.items.single.name, 'Demo App 1');
+      expect(list.items.single.downloadCount, 12);
       expect(list.items.single.createdAt, DateTime.utc(2026, 6, 14, 8));
       expect(list.hasMore, isTrue);
 
@@ -180,6 +181,18 @@ void main() {
       await serverDone;
       await tempDir.delete(recursive: true);
     }
+  });
+
+  test('AppStoreApp defaults a missing download count to zero', () {
+    final app = AppStoreApp.fromJson({
+      'id': 1,
+      'app_id': 399401,
+      'type': 'game',
+      'internal_name': 'demo',
+      'name': 'Demo',
+    });
+
+    expect(app.downloadCount, 0);
   });
 
   test(
@@ -479,6 +492,7 @@ Map<String, Object> _appPage({
         'manufacturer': {'id': 2, 'name': 'Demo Vendor'},
         'description': 'Demo description',
         'icon_url': '/storage/icons/demo.png',
+        'download_count': 12,
         'created_at': '2026-06-14T08:00:00Z',
         'updated_at': '2026-06-14T08:00:00Z',
       },

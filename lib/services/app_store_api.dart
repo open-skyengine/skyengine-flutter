@@ -89,6 +89,7 @@ class AppStoreApp {
   final AppStoreManufacturer? manufacturer;
   final String description;
   final String? iconUrl;
+  final int downloadCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -101,6 +102,7 @@ class AppStoreApp {
     required this.manufacturer,
     required this.description,
     required this.iconUrl,
+    this.downloadCount = 0,
     this.createdAt,
     this.updatedAt,
   });
@@ -118,6 +120,7 @@ class AppStoreApp {
           : null,
       description: _readString(json['description']),
       iconUrl: _nullableString(json['icon_url']),
+      downloadCount: _readInt(json['download_count']),
       createdAt: _readDateTime(json['created_at']),
       updatedAt: _readDateTime(json['updated_at']),
     );

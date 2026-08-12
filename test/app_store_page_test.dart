@@ -21,6 +21,8 @@ void main() {
     expect(find.text('游戏'), findsOneWidget);
     expect(find.text('Software Demo'), findsOneWidget);
     expect(find.text('Game Demo'), findsOneWidget);
+    expect(find.text('12 次下载'), findsOneWidget);
+    expect(find.text('0 次下载'), findsOneWidget);
     expect(client.fetchCalls.single.type, isNull);
     expect(client.fetchCalls.single.resolution, isNull);
     expect(client.fetchCalls.single.sortBy, 'created_at');
@@ -291,6 +293,7 @@ class _FakeAppStoreClient extends AppStoreClient {
     manufacturer: const AppStoreManufacturer(id: 1, name: 'Demo Vendor'),
     description: 'Demo details',
     iconUrl: null,
+    downloadCount: 12,
     createdAt: DateTime.utc(2026, 8, 9),
   );
 

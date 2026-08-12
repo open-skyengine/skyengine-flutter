@@ -41,6 +41,10 @@
   "downloadAndRun": "Download and run",
   "downloadCompleteOpening": "Download complete. Opening...",
   "downloadFailed": "Download failed",
+  "downloadCount": "{count} downloads",
+  "@downloadCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
   "downloadNotificationDescription": "Download progress will appear in notifications once notifications are enabled",
   "downloadedOpening": "Already downloaded. Opening...",
   "downloading": "Downloading",

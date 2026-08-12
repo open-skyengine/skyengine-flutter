@@ -326,6 +326,12 @@ abstract class AppLocalizations {
   /// **'Download failed'**
   String get downloadFailed;
 
+  /// No description provided for @downloadCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} downloads'**
+  String downloadCount(int count);
+
   /// No description provided for @downloadNotificationDescription.
   ///
   /// In en, this message translates to:
