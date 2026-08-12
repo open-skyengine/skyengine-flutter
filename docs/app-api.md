@@ -193,6 +193,7 @@ GET /api/app/v1/apps?sort_by=name&sort_order=asc
       },
       "description": "Demo description",
       "icon_url": "/storage/icons/demo.png",
+      "download_count": 12,
       "created_at": "2026-06-14T08:00:00Z",
       "updated_at": "2026-06-14T08:00:00Z"
     }
@@ -202,6 +203,9 @@ GET /api/app/v1/apps?sort_by=name&sort_order=asc
   "page_size": 20
 }
 ```
+
+`download_count` 为该应用通过 APP API 发起的累计下载请求数，与
+`order=download` 使用相同的统计口径；没有下载记录时返回 `0`。
 
 ### 4.2 分页搜索应用
 

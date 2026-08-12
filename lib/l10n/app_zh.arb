@@ -38,6 +38,7 @@
   "downloadAndRun": "下载并运行",
   "downloadCompleteOpening": "下载完成，正在打开",
   "downloadFailed": "下载失败",
+  "downloadCount": "{count} 次下载",
   "downloadNotificationDescription": "开启通知后，下载进度会显示在通知栏",
   "downloadedOpening": "已下载，正在打开",
   "downloading": "正在下载",

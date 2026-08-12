@@ -126,6 +126,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadFailed => 'Download failed';
 
   @override
+  String downloadCount(int count) {
+    return '$count downloads';
+  }
+
+  @override
   String get downloadNotificationDescription =>
       'Download progress will appear in notifications once notifications are enabled';
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/app_store_api.dart';
 
 class AppStoreAppIcon extends StatelessWidget {
@@ -81,7 +82,26 @@ class AppStoreAppTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       isThreeLine: subtitle.length > 1,
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.download_outlined,
+            size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            context.l10n.downloadCount(app.downloadCount),
+            key: ValueKey('store-app-download-count-${app.appId}'),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
       onTap: onTap,
     );
   }

@@ -125,6 +125,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadFailed => '下载失败';
 
   @override
+  String downloadCount(int count) {
+    return '$count 次下载';
+  }
+
+  @override
   String get downloadNotificationDescription => '开启通知后，下载进度会显示在通知栏';
 
   @override
