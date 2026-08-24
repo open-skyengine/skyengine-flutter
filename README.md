@@ -2,6 +2,25 @@
 
 A new Flutter project.
 
+## Native SkyEngine library
+
+The app loads SkyEngine v2 through `dart:ffi`. The `skyengine` submodule builds
+the Rust runtime as a native shared library named `libskyengine.so` on Android
+and Linux or `skyengine.dll` on Windows. Flutter drives the runtime through the
+stable `skyengine_api_*` C ABI while the VM runs on its own native thread.
+
+Install Rust and the Android targets before building an APK:
+
+```powershell
+rustup target add aarch64-linux-android armv7-linux-androideabi
+flutter build apk --release --target-platform android-arm,android-arm64
+```
+
+The Gradle/CMake build compiles and packages the shared library automatically;
+prebuilt `.so` files are not checked into this repository. Windows and Linux
+Flutter builds use the same CMake target and copy the resulting shared library
+next to the application executable.
+
 ## Android APK size
 
 Debug APKs and universal release APKs are large because they include Flutter

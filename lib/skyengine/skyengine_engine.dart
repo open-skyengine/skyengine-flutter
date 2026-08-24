@@ -152,9 +152,16 @@ class SkyEngineEngine {
       _audioPlayer = SkyEngineAudioPlayer(bindings: _bindings!);
       return true;
     } catch (e) {
-      lastError = 'Failed to load vmrp library: $e';
+      lastError = 'Failed to load SkyEngine shared library: $e';
       return false;
     }
+  }
+
+  void _setNativeError(String operation, int result) {
+    final detail = _bindings?.readLastError();
+    lastError = detail == null
+        ? '$operation returned $result'
+        : '$operation failed: $detail';
   }
 
   int init() {
@@ -162,13 +169,13 @@ class SkyEngineEngine {
     try {
       final ret = _bindings!.init(panelScreenWidth, panelScreenHeight);
       if (ret != 0) {
-        lastError = 'vmrp_api_init returned $ret';
+        _setNativeError('skyengine_api_init', ret);
       } else {
         _syncScreenGeometry();
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_init crashed: $e';
+      lastError = 'skyengine_api_init call failed: $e';
       return -1;
     }
   }
@@ -178,11 +185,11 @@ class SkyEngineEngine {
     try {
       final ret = _bindings!.setMemory(memoryMb);
       if (ret != 0) {
-        lastError = 'vmrp_api_set_memory returned $ret';
+        _setNativeError('skyengine_api_set_memory', ret);
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_set_memory crashed: $e';
+      lastError = 'skyengine_api_set_memory call failed: $e';
       return -1;
     }
   }
@@ -195,7 +202,7 @@ class SkyEngineEngine {
     if (!_ensureBindings()) return -1;
     final setDeviceDate = _bindings!.setDeviceDate;
     if (setDeviceDate == null) {
-      lastError = 'vmrp_api_set_device_date is unavailable';
+      lastError = 'skyengine_api_set_device_date is unavailable';
       return -1;
     }
     final normalizedDate = date.trim();
@@ -207,11 +214,11 @@ class SkyEngineEngine {
     try {
       final ret = setDeviceDate(pDate.cast());
       if (ret != 0) {
-        lastError = 'vmrp_api_set_device_date returned $ret';
+        _setNativeError('skyengine_api_set_device_date', ret);
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_set_device_date crashed: $e';
+      lastError = 'skyengine_api_set_device_date call failed: $e';
       return -1;
     } finally {
       malloc.free(pDate);
@@ -246,12 +253,7 @@ class SkyEngineEngine {
       if (pWorkDir != nullptr) {
         final setWorkDirRet = _bindings!.setWorkDir(pWorkDir.cast());
         if (setWorkDirRet != 0) {
-          lastError = 'vmrp_api_set_work_dir returned $setWorkDirRet';
-          malloc.free(pPath);
-          malloc.free(pExt);
-          malloc.free(pWorkDir);
-          if (pEntry != nullptr) malloc.free(pEntry);
-          if (pDnsMap != nullptr) malloc.free(pDnsMap);
+          _setNativeError('skyengine_api_set_work_dir', setWorkDirRet);
           return -1;
         }
       }
@@ -259,24 +261,12 @@ class SkyEngineEngine {
       if (pDnsMap != nullptr) {
         final setDnsMapRet = _bindings!.setDnsMap(pDnsMap.cast());
         if (setDnsMapRet != 0) {
-          lastError = 'vmrp_api_set_dns_map returned $setDnsMapRet';
-          malloc.free(pPath);
-          malloc.free(pExt);
-          if (pWorkDir != nullptr) malloc.free(pWorkDir);
-          if (pEntry != nullptr) malloc.free(pEntry);
-          malloc.free(pDnsMap);
+          _setNativeError('skyengine_api_set_dns_map', setDnsMapRet);
           return -1;
         }
       }
 
       final ret = _bindings!.start(pPath.cast(), pExt.cast(), pEntry.cast());
-
-      malloc.free(pPath);
-      malloc.free(pExt);
-      if (pWorkDir != nullptr) malloc.free(pWorkDir);
-      if (pEntry != nullptr) malloc.free(pEntry);
-      if (pDnsMap != nullptr) malloc.free(pDnsMap);
-
       if (ret == 0) {
         _running = true;
         _paused = false;
@@ -290,17 +280,18 @@ class SkyEngineEngine {
         }
         _wakeAudio();
       } else {
-        lastError = 'vmrp_api_start returned $ret';
+        _setNativeError('skyengine_api_start', ret);
       }
       return ret;
     } catch (e) {
+      lastError = 'skyengine_api_start call failed: $e';
+      return -1;
+    } finally {
       malloc.free(pPath);
       malloc.free(pExt);
       if (pWorkDir != nullptr) malloc.free(pWorkDir);
       if (pEntry != nullptr) malloc.free(pEntry);
       if (pDnsMap != nullptr) malloc.free(pDnsMap);
-      lastError = 'vmrp_api_start crashed: $e';
-      return -1;
     }
   }
 
@@ -309,11 +300,11 @@ class SkyEngineEngine {
     try {
       final ret = _bindings!.setImageProcessingMode(mode.code);
       if (ret != 0) {
-        lastError = 'vmrp_api_set_image_processing_mode returned $ret';
+        _setNativeError('skyengine_api_set_image_processing_mode', ret);
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_set_image_processing_mode crashed: $e';
+      lastError = 'skyengine_api_set_image_processing_mode call failed: $e';
       return -1;
     }
   }
@@ -370,10 +361,12 @@ class SkyEngineEngine {
         _statePollTimer = null;
         _discardShakeRequest();
         unawaited(_audioPlayer?.stop() ?? Future<void>.value());
+      } else {
+        _setNativeError('skyengine_api_pause', ret);
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_pause crashed: $e';
+      lastError = 'skyengine_api_pause call failed: $e';
       return -1;
     }
   }
@@ -388,10 +381,12 @@ class SkyEngineEngine {
         _syncMotionSensor();
         _scheduleStatePoll();
         _wakeAudio();
+      } else {
+        _setNativeError('skyengine_api_resume', ret);
       }
       return ret;
     } catch (e) {
-      lastError = 'vmrp_api_resume crashed: $e';
+      lastError = 'skyengine_api_resume call failed: $e';
       return -1;
     }
   }
@@ -419,13 +414,22 @@ class SkyEngineEngine {
   void confirmEdit(String text) {
     if (_bindings == null) return;
     final pText = text.toNativeUtf8();
-    _bindings!.setEditText(pText.cast());
-    malloc.free(pText);
+    try {
+      final ret = _bindings!.setEditText(pText.cast());
+      if (ret != 0) {
+        _setNativeError('skyengine_api_set_edit_text', ret);
+      }
+    } finally {
+      malloc.free(pText);
+    }
   }
 
   void cancelEdit() {
     if (_bindings == null) return;
-    _bindings!.cancelEdit();
+    final ret = _bindings!.cancelEdit();
+    if (ret != 0) {
+      _setNativeError('skyengine_api_cancel_edit', ret);
+    }
   }
 
   void dispose() {
@@ -456,6 +460,10 @@ class SkyEngineEngine {
   void _checkState() {
     if (_bindings == null || _paused) return;
     if (_bindings!.isRunning() == 0) {
+      final nativeError = _bindings!.readLastError();
+      if (nativeError != null) {
+        lastError = 'SkyEngine runtime stopped: $nativeError';
+      }
       _markExited();
       return;
     }

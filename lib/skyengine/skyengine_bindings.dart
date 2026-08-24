@@ -101,6 +101,9 @@ typedef SkyEngineApiSetEditTextDart = int Function(Pointer<Utf8>);
 typedef SkyEngineApiCancelEditC = Int32 Function();
 typedef SkyEngineApiCancelEditDart = int Function();
 
+typedef SkyEngineApiLastErrorC = Pointer<Utf8> Function();
+typedef SkyEngineApiLastErrorDart = Pointer<Utf8> Function();
+
 class SkyEngineBindings {
   late final DynamicLibrary _lib;
 
@@ -137,6 +140,7 @@ class SkyEngineBindings {
   late final SkyEngineApiGetEditTextDart getEditText;
   late final SkyEngineApiSetEditTextDart setEditText;
   late final SkyEngineApiCancelEditDart cancelEdit;
+  SkyEngineApiLastErrorDart? lastError;
 
   SkyEngineBindings() {
     if (Platform.isAndroid || Platform.isLinux) {
@@ -311,5 +315,22 @@ class SkyEngineBindings {
         .lookupFunction<SkyEngineApiCancelEditC, SkyEngineApiCancelEditDart>(
           'skyengine_api_cancel_edit',
         );
+    try {
+      lastError = _lib
+          .lookupFunction<SkyEngineApiLastErrorC, SkyEngineApiLastErrorDart>(
+            'skyengine_api_last_error',
+          );
+    } catch (_) {
+      lastError = null;
+    }
+  }
+
+  String? readLastError() {
+    final getter = lastError;
+    if (getter == null) return null;
+    final pointer = getter();
+    if (pointer == nullptr) return null;
+    final message = pointer.toDartString().trim();
+    return message.isEmpty ? null : message;
   }
 }

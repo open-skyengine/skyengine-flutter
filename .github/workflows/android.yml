@@ -19,12 +19,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         run: flutter pub get
@@ -34,6 +39,10 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+      - name: Test native bridge
+        working-directory: skyengine
+        run: cargo test -p skyengine-core -p skyengine-ffi
 
   publish-continuous:
     name: Publish continuous APK
@@ -52,6 +61,11 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Install dependencies
         run: flutter pub get
@@ -139,6 +153,11 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Install dependencies
         run: flutter pub get
