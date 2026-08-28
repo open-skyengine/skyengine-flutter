@@ -559,7 +559,7 @@ class AppStoreClient {
     }
 
     final version = versions.items.first;
-    final package = version.packages.isNotEmpty ? version.packages.first : null;
+    final package = _packageForResolution(version, resolution);
 
     if (!await destinationDir.exists()) {
       await destinationDir.create(recursive: true);
@@ -645,6 +645,24 @@ class AppStoreClient {
     }
 
     return DownloadedMrp(file: file, version: version);
+  }
+
+  Future<File?> findDownloadedVersion({
+    required AppStoreApp app,
+    required AppStoreVersion version,
+    required Directory destinationDir,
+    required String resolution,
+  }) async {
+    if (!await destinationDir.exists()) {
+      return null;
+    }
+    return _findDownloadedFile(
+      app: app,
+      version: version,
+      package: _packageForResolution(version, resolution),
+      destinationDir: destinationDir,
+      resolution: resolution,
+    );
   }
 
   Future<AppStoreEmulatorUpdate> checkEmulatorUpdate({
@@ -833,6 +851,19 @@ class AppStoreClient {
   }
 
   Uri resolveAssetUri(String pathOrUrl) => _resolveApiUri(pathOrUrl);
+
+  AppStorePackage? _packageForResolution(
+    AppStoreVersion version,
+    String resolution,
+  ) {
+    final normalizedResolution = resolution.trim().toLowerCase();
+    for (final package in version.packages) {
+      if (package.resolution?.trim().toLowerCase() == normalizedResolution) {
+        return package;
+      }
+    }
+    return version.packages.isEmpty ? null : version.packages.first;
+  }
 
   Future<File?> _findDownloadedFile({
     required AppStoreApp app,

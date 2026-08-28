@@ -320,6 +320,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rightSoftKey => '右软键';
 
   @override
+  String get run => '运行';
+
+  @override
   String get search => '搜索';
 
   @override

@@ -133,6 +133,14 @@ void main() {
       expect(downloaded.file.path.endsWith('demo2.mrp'), isTrue);
       expect(downloaded.version.packages.single.resolution, '240x320');
 
+      final foundDownloaded = await client.findDownloadedVersion(
+        app: search.items.single,
+        version: downloaded.version,
+        destinationDir: tempDir,
+        resolution: '240x320',
+      );
+      expect(foundDownloaded?.path, downloaded.file.path);
+
       final downloadedAgain = await client.downloadLatestVersion(
         app: search.items.single,
         destinationDir: tempDir,

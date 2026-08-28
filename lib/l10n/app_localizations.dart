@@ -680,6 +680,12 @@ abstract class AppLocalizations {
   /// **'Right soft key'**
   String get rightSoftKey;
 
+  /// No description provided for @run.
+  ///
+  /// In en, this message translates to:
+  /// **'Run'**
+  String get run;
+
   /// No description provided for @search.
   ///
   /// In en, this message translates to:

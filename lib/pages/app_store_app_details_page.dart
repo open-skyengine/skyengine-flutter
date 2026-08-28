@@ -39,7 +39,10 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
   String? _error;
   bool _loading = true;
   bool _downloading = false;
+  bool _checkingDownloaded = false;
   double? _downloadProgress;
+  File? _downloadedFile;
+  int _downloadCheckGeneration = 0;
 
   @override
   void initState() {
@@ -69,6 +72,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
           _selectedResolution = resolutions.first;
         }
       });
+      await _refreshDownloadedFile();
     } catch (error) {
       if (mounted) {
         setState(() => _error = error.toString());
@@ -78,6 +82,58 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _refreshDownloadedFile() async {
+    final generation = ++_downloadCheckGeneration;
+    final directory = widget.mrpDir;
+    final resolution = _selectedResolution ?? kDefaultMrpResolution.label;
+    final version = _versionForResolution(_versions, resolution);
+    if (directory == null || version == null) {
+      if (mounted) {
+        setState(() {
+          _downloadedFile = null;
+          _checkingDownloaded = false;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _downloadedFile = null;
+      _checkingDownloaded = true;
+    });
+    File? downloadedFile;
+    try {
+      downloadedFile = await widget.client.findDownloadedVersion(
+        app: widget.app,
+        version: version,
+        destinationDir: Directory(directory),
+        resolution: resolution,
+      );
+    } catch (_) {
+      // A failed cache lookup should still leave downloading available.
+    }
+    if (!mounted || generation != _downloadCheckGeneration) {
+      return;
+    }
+    setState(() {
+      _downloadedFile = downloadedFile;
+      _checkingDownloaded = false;
+    });
+  }
+
+  Future<void> _runOrDownload() async {
+    final downloadedFile = _downloadedFile;
+    final resolution = _selectedResolution ?? kDefaultMrpResolution.label;
+    if (downloadedFile != null && downloadedFile.existsSync()) {
+      widget.onRunMrp(downloadedFile.path, resolution: resolution);
+      return;
+    }
+    if (downloadedFile != null && mounted) {
+      setState(() => _downloadedFile = null);
+    }
+    await _downloadAndRun();
   }
 
   Future<void> _downloadAndRun() async {
@@ -119,6 +175,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
       if (!mounted) {
         return;
       }
+      setState(() => _downloadedFile = downloaded.file);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -149,6 +206,7 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
   Widget build(BuildContext context) {
     final app = widget.app;
     final l10n = context.l10n;
+    final isDownloaded = _downloadedFile != null;
     final displayName = app.name.isEmpty ? app.internalName : app.name;
     return Scaffold(
       appBar: AppBar(title: Text(displayName)),
@@ -199,17 +257,25 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: FilledButton.icon(
-              onPressed: _loading || _versions.isEmpty || _downloading
+              onPressed:
+                  _loading ||
+                      _versions.isEmpty ||
+                      _downloading ||
+                      _checkingDownloaded
                   ? null
-                  : _downloadAndRun,
+                  : _runOrDownload,
               icon: _downloading
                   ? const SizedBox.square(
                       dimension: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.play_arrow),
+                  : Icon(isDownloaded ? Icons.play_arrow : Icons.download),
               label: Text(
-                _downloading ? _downloadLabel() : l10n.downloadAndRun,
+                _downloading
+                    ? _downloadLabel()
+                    : isDownloaded
+                    ? l10n.run
+                    : l10n.downloadAndRun,
               ),
             ),
           ),
@@ -282,8 +348,12 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
                   ChoiceChip(
                     label: Text(resolution),
                     selected: _selectedResolution == resolution,
-                    onSelected: (_) {
+                    onSelected: (selected) {
+                      if (!selected || _selectedResolution == resolution) {
+                        return;
+                      }
                       setState(() => _selectedResolution = resolution);
+                      unawaited(_refreshDownloadedFile());
                     },
                   ),
               ],
@@ -314,6 +384,22 @@ class _AppStoreAppDetailsPageState extends State<AppStoreAppDetailsPage> {
         ? context.l10n.downloading
         : context.l10n.downloadingProgress((progress * 100).floor());
   }
+}
+
+AppStoreVersion? _versionForResolution(
+  List<AppStoreVersion> versions,
+  String resolution,
+) {
+  final normalizedResolution = resolution.trim().toLowerCase();
+  for (final version in versions) {
+    if (version.packages.any(
+      (package) =>
+          package.resolution?.trim().toLowerCase() == normalizedResolution,
+    )) {
+      return version;
+    }
+  }
+  return versions.isEmpty ? null : versions.first;
 }
 
 List<String> _packageResolutions(List<AppStoreVersion> versions) {

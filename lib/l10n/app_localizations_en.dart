@@ -325,6 +325,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rightSoftKey => 'Right soft key';
 
   @override
+  String get run => 'Run';
+
+  @override
   String get search => 'Search';
 
   @override
