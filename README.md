@@ -113,7 +113,15 @@ Debug APK 和通用 Release APK 会包含调试资源或多个原生 ABI，因�
 
 发布流程还会以相同版本号将 APK 上传到模拟器更新服务。需要配置
 `MRP_SERVER`，并提供具有 `emulator_apk:publish` 权限的
-`MRP_ACCESS_TOKEN` secret。手动发布示例：
+`MRP_ACCESS_TOKEN` secret。CI 会先把 APK 上传到七牛私有空间，再把一小时有效的
+下载凭证地址交给更新服务抓取。还需要配置以下 GitHub Secrets：
+
+- `QINIU_ACCESS_KEY`：七牛 AccessKey
+- `QINIU_SECRET_KEY`：七牛 SecretKey
+- `QINIU_BUCKET`：对象存储空间名
+- `QINIU_DOMAIN`：绑定到该私有空间的下载域名
+
+手动发布示例：
 
 ```powershell
 $env:MRP_SERVER = "https://example.com"

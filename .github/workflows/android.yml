@@ -28,17 +28,29 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install Node.js dependencies
+        run: npm ci --ignore-scripts
+
       - name: Analyze
         run: flutter analyze
 
       - name: Run tests
         run: flutter test
+
+      - name: Test Node.js tools
+        run: npm run test:tools
 
       - name: Test native bridge
         working-directory: skyengine
@@ -154,6 +166,12 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -161,6 +179,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Install Node.js dependencies
+        run: npm ci --ignore-scripts
 
       - name: Verify tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
@@ -230,65 +251,61 @@ jobs:
             dist/skyengine-${{ github.ref_name }}-arm64-v8a.apk
             dist/skyengine-${{ github.ref_name }}-armeabi-v7a.apk
 
-      - name: Upload universal APK to file transfer
-        id: upload_universal
-        run: |
-          DOWNLOAD_URL=$(node tool/upload-file.js "dist/skyengine-${GITHUB_REF_NAME}.apk" --direct)
-          test -n "$DOWNLOAD_URL"
-          echo "download_url=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Publish universal APK to update server
+      - name: Upload and publish universal APK
         env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+          QINIU_DOMAIN: ${{ secrets.QINIU_DOMAIN }}
           MRP_SERVER: ${{ secrets.MRP_SERVER }}
           MRP_ACCESS_TOKEN: ${{ secrets.MRP_ACCESS_TOKEN }}
         run: |
           test -n "$MRP_SERVER"
           test -n "$MRP_ACCESS_TOKEN"
+          DOWNLOAD_URL=$(node tool/upload-file-qiniu.js "dist/skyengine-${GITHUB_REF_NAME}.apk")
+          test -n "$DOWNLOAD_URL"
           node tool/publish_emulator_apk.js \
-            --download-url "${{ steps.upload_universal.outputs.download_url }}" \
+            --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture universal \
             --version "${{ steps.version.outputs.name }}" \
             --changelog-md CHANGELOG.MD
 
-      - name: Upload arm64-v8a APK to file transfer
-        id: upload_arm64
-        run: |
-          DOWNLOAD_URL=$(node tool/upload-file.js "dist/skyengine-${GITHUB_REF_NAME}-arm64-v8a.apk" --direct)
-          test -n "$DOWNLOAD_URL"
-          echo "download_url=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Publish arm64-v8a APK to update server
+      - name: Upload and publish arm64-v8a APK
         env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+          QINIU_DOMAIN: ${{ secrets.QINIU_DOMAIN }}
           MRP_SERVER: ${{ secrets.MRP_SERVER }}
           MRP_ACCESS_TOKEN: ${{ secrets.MRP_ACCESS_TOKEN }}
         run: |
           test -n "$MRP_SERVER"
           test -n "$MRP_ACCESS_TOKEN"
+          DOWNLOAD_URL=$(node tool/upload-file-qiniu.js "dist/skyengine-${GITHUB_REF_NAME}-arm64-v8a.apk")
+          test -n "$DOWNLOAD_URL"
           node tool/publish_emulator_apk.js \
-            --download-url "${{ steps.upload_arm64.outputs.download_url }}" \
+            --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture arm64-v8a \
             --version "${{ steps.version.outputs.name }}" \
             --changelog-md CHANGELOG.MD
 
-      - name: Upload armeabi-v7a APK to file transfer
-        id: upload_armv7
-        run: |
-          DOWNLOAD_URL=$(node tool/upload-file-jisuchuan.js "dist/skyengine-${GITHUB_REF_NAME}-armeabi-v7a.apk" --direct)
-          echo "link -> $DOWNLOAD_URL"
-          test -n "$DOWNLOAD_URL"
-          echo "download_url=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Publish armeabi-v7a APK to update server
+      - name: Upload and publish armeabi-v7a APK
         env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+          QINIU_DOMAIN: ${{ secrets.QINIU_DOMAIN }}
           MRP_SERVER: ${{ secrets.MRP_SERVER }}
           MRP_ACCESS_TOKEN: ${{ secrets.MRP_ACCESS_TOKEN }}
         run: |
           test -n "$MRP_SERVER"
           test -n "$MRP_ACCESS_TOKEN"
+          DOWNLOAD_URL=$(node tool/upload-file-qiniu.js "dist/skyengine-${GITHUB_REF_NAME}-armeabi-v7a.apk")
+          test -n "$DOWNLOAD_URL"
           node tool/publish_emulator_apk.js \
-            --download-url "${{ steps.upload_armv7.outputs.download_url }}" \
+            --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture armeabi-v7a \
             --version "${{ steps.version.outputs.name }}" \

@@ -1,0 +1,13 @@
+{
+  "name": "skyengine-flutter-tools",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test:tools": "node --test tool/*.test.js"
+  },
+  "dependencies": {
+    "qiniu": "7.15.2"
+  }
+}
