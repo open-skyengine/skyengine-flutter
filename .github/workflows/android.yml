@@ -56,8 +56,8 @@ jobs:
         working-directory: skyengine
         run: cargo test -p skyengine-core -p skyengine-ffi
 
-  publish-continuous:
-    name: Publish continuous APK
+  build-continuous:
+    name: Build continuous APK
     runs-on: ubuntu-latest
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -130,6 +130,29 @@ jobs:
           flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm --build-name 1.0.16-continuous --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk dist/skyengine-continuous-armeabi-v7a.apk
 
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: continuous-apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+  publish-continuous:
+    name: Upload and publish continuous APK
+    runs-on: ubuntu-latest
+    needs: build-continuous
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: continuous-apks
+          path: dist
+
       - name: Move continuous tag
         run: |
           git tag --force continuous "$GITHUB_SHA"
@@ -147,11 +170,13 @@ jobs:
             dist/skyengine-continuous-arm64-v8a.apk
             dist/skyengine-continuous-armeabi-v7a.apk
 
-  publish-release:
-    name: Publish release APK
+  build-release:
+    name: Build release APK
     runs-on: ubuntu-latest
     needs: verify
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      version: ${{ steps.version.outputs.name }}
 
     steps:
       - name: Checkout
@@ -166,12 +191,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -179,9 +198,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Install Node.js dependencies
-        run: npm ci --ignore-scripts
 
       - name: Verify tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
@@ -240,6 +256,38 @@ jobs:
           flutter build apk --release "${DART_DEFINES[@]}" --target-platform android-arm --build-name ${{ steps.version.outputs.name }} --build-number ${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk "dist/skyengine-${GITHUB_REF_NAME}-armeabi-v7a.apk"
 
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+  publish-release:
+    name: Upload and publish release APK
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apks
+          path: dist
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -268,7 +316,7 @@ jobs:
             --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture universal \
-            --version "${{ steps.version.outputs.name }}" \
+            --version "${{ needs.build-release.outputs.version }}" \
             --changelog-md CHANGELOG.MD
 
       - name: Upload and publish arm64-v8a APK
@@ -288,7 +336,7 @@ jobs:
             --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture arm64-v8a \
-            --version "${{ steps.version.outputs.name }}" \
+            --version "${{ needs.build-release.outputs.version }}" \
             --changelog-md CHANGELOG.MD
 
       - name: Upload and publish armeabi-v7a APK
@@ -308,5 +356,5 @@ jobs:
             --download-url "$DOWNLOAD_URL" \
             --fetch-file \
             --architecture armeabi-v7a \
-            --version "${{ steps.version.outputs.name }}" \
+            --version "${{ needs.build-release.outputs.version }}" \
             --changelog-md CHANGELOG.MD
